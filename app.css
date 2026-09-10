@@ -1,0 +1,339 @@
+/* app.css — Cymbal in the solhann.net house style: amber ground, cream panels, dark
+ * ink, coral accent, Press Start 2P for short labels, Orbitron for reading, hard
+ * shadows. Mobile first; the content column never exceeds 760px. */
+
+:root {
+  --bg: #FFB84D;
+  --ink: #2b2b29;
+  --muted: #5f5d56;
+  --panel: #fffaf0;
+  --panel-2: #fff2d6;
+  --line: #2b2b29;
+  --accent: #D56062;
+  --accent-strong: #B8484A;
+  --accent-ink: #fffaf0;
+  --ok: #1f7a4d;
+  --warn: #9a3b12;
+  --focus: #1b4dd6;
+  --shadow: 4px 4px 0 var(--line);
+  --shadow-sm: 3px 3px 0 var(--line);
+  --radius: 6px;
+  --label: "Press Start 2P", ui-monospace, monospace;
+  --read: "Orbitron", system-ui, sans-serif;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #3f403e;
+  --ink: #FFB84D;
+  --muted: #d7cda8;
+  --panel: #4b4c49;
+  --panel-2: #555652;
+  --line: #1b1b1a;
+  --accent: #ff9aa0;
+  --accent-strong: #ff9aa0;
+  --accent-ink: #1b1b1a;
+  --ok: #8be3b0;
+  --warn: #ffb08a;
+  --focus: #9cc0ff;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+
+/* Components set display (flex, grid); `hidden` must still win over all of them. */
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  min-height: 100vh;
+  font-family: var(--read);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+  padding-bottom: env(safe-area-inset-bottom);
+  transition: background-color .25s, color .25s;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(14px, env(safe-area-inset-right));
+}
+
+a { color: inherit; text-underline-offset: 3px; }
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.skip {
+  position: absolute;
+  left: 8px;
+  top: -60px;
+  z-index: 10;
+  background: var(--panel);
+  padding: 10px 12px;
+  border: 3px solid var(--line);
+  border-radius: var(--radius);
+}
+.skip:focus { top: 8px; }
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  border-bottom: 3px solid var(--line);
+  padding-top: env(safe-area-inset-top);
+}
+.top-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 60px;
+}
+.brand {
+  font-family: var(--label);
+  font-size: clamp(11px, 3.6vw, 15px);
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, .15);
+}
+.brand-sub { color: var(--accent-strong); }
+[data-theme="dark"] .brand-sub { color: var(--accent); }
+.brand-mark {
+  width: 22px; height: 22px;
+  border: 3px solid var(--line);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--line) 0 3px, var(--accent) 4px);
+  flex: none;
+}
+.top-actions { display: flex; gap: 8px; }
+
+/* ── controls ───────────────────────────────────────────────────────────── */
+
+.btn {
+  font-family: var(--label);
+  font-size: 10px;
+  line-height: 1.3;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 14px;
+  border: 3px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn:active { transform: translate(2px, 2px); box-shadow: none; }
+.btn[disabled] { opacity: .55; cursor: progress; }
+.btn-primary { background: var(--accent-strong); color: var(--accent-ink); }
+.btn-small { font-size: 9px; padding: 8px 10px; }
+.btn-quiet { box-shadow: none; background: transparent; }
+
+.label {
+  display: block;
+  font-family: var(--label);
+  font-size: 10px;
+  letter-spacing: .04em;
+  margin-bottom: 8px;
+}
+.label-note { font-family: var(--read); font-size: 12px; letter-spacing: 0; color: var(--muted); }
+
+input[type="url"], input[type="text"], textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 16px; /* 16px stops iOS zooming into the field */
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 3px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  min-height: 44px;
+}
+textarea { resize: vertical; min-height: 64px; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+
+.panel {
+  background: var(--panel);
+  border: 3px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.status { min-height: 1.4em; font-size: 13px; margin-top: 8px; }
+.status.is-error { color: var(--warn); font-weight: 700; }
+.status.is-ok { color: var(--ok); font-weight: 700; }
+.hint, .count { font-size: 12px; color: var(--muted); }
+
+/* ── gate ───────────────────────────────────────────────────────────────── */
+
+.gate { margin-top: 20px; display: grid; gap: 14px; justify-items: start; }
+
+/* ── playlists ──────────────────────────────────────────────────────────── */
+
+.playlists { margin: 16px 0 14px; }
+.playlist-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.playlist-list .btn { width: 100%; font-size: 9px; padding: 8px 6px; text-align: center; }
+.playlist-list .is-waiting { opacity: .7; box-shadow: none; border-style: dashed; cursor: default; }
+
+/* ── composer ───────────────────────────────────────────────────────────── */
+
+.composer { display: grid; gap: 4px; }
+.composer label + input, .composer label + textarea { margin-bottom: 10px; }
+.composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* ── feed ───────────────────────────────────────────────────────────────── */
+
+.feed { margin-top: 18px; outline: none; }
+.posts { list-style: none; padding: 0; display: grid; gap: 14px; }
+.card { display: grid; gap: 8px; }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.src {
+  font-family: var(--label);
+  font-size: 8px;
+  padding: 5px 7px;
+  border: 2px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  background: var(--panel-2);
+}
+.track { font-size: 17px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.track a { text-decoration: none; }
+.track a:hover, .track a:focus-visible { text-decoration: underline; }
+.artist { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.caption, .comment-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.caption { font-size: 14px; border-left: 4px solid var(--accent); padding-left: 10px; }
+.resolving { color: var(--muted); font-style: italic; }
+
+.syncs { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.sync {
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: var(--panel-2);
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+.sync a { text-decoration: none; display: inline-flex; gap: 5px; align-items: center; }
+.sync-synced { color: var(--ok); }
+.sync-attention { color: var(--warn); }
+.sync-pending { color: var(--muted); }
+.sync-mark { font-family: var(--label); font-size: 8px; }
+
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.comments { border-top: 2px dashed var(--line); padding-top: 10px; display: grid; gap: 10px; }
+.comment-list { list-style: none; padding: 0; display: grid; gap: 10px; }
+.comment { display: grid; gap: 2px; font-size: 14px; }
+.comment-meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.comment-form { display: grid; gap: 8px; }
+.comment-form .row { display: flex; gap: 8px; justify-content: flex-end; }
+.link-btn {
+  font: inherit;
+  font-size: 11px;
+  background: none;
+  border: none;
+  color: var(--warn);
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.feed-status { text-align: center; }
+.more { display: flex; margin: 12px auto 0; }
+.empty { text-align: center; padding: 26px 16px; }
+
+/* ── owner ──────────────────────────────────────────────────────────────── */
+
+.owner { margin-top: 14px; display: grid; gap: 12px; }
+.owner details > summary {
+  font-family: var(--label);
+  font-size: 10px;
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.owner-grid { display: grid; gap: 10px; }
+.prov { border: 2px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 6px; background: var(--panel-2); }
+.prov h3 { font-family: var(--label); font-size: 10px; }
+.prov p { font-size: 13px; }
+.prov .row, .owner .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.prov .bad { color: var(--warn); font-weight: 700; }
+.prov .good { color: var(--ok); font-weight: 700; }
+.small { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.attn { list-style: none; padding: 0; display: grid; gap: 10px; }
+.attn li { border: 2px solid var(--line); border-radius: var(--radius); padding: 10px; display: grid; gap: 6px; font-size: 13px; }
+.attn form { display: flex; gap: 8px; flex-wrap: wrap; }
+.attn input { flex: 1 1 220px; }
+code { font-size: 12px; overflow-wrap: anywhere; }
+
+/* ── footer, legal pages ────────────────────────────────────────────────── */
+
+.foot { display: flex; gap: 18px; justify-content: center; padding-top: 26px; padding-bottom: 30px; font-size: 13px; }
+.foot a { min-height: 44px; display: inline-flex; align-items: center; }
+.doc { margin-top: 18px; display: grid; gap: 12px; }
+.doc h2 { font-family: var(--label); font-size: 11px; line-height: 1.5; margin-top: 8px; }
+.doc p, .doc li { font-size: 14px; }
+.doc ul { padding-left: 20px; display: grid; gap: 6px; }
+
+/* Narrow phones: the name, the theme toggle and sign-out share one row. */
+@media (max-width: 420px) {
+  .top-inner { gap: 6px; }
+  .brand { gap: 7px; font-size: 10px; }
+  .brand-mark { width: 18px; height: 18px; }
+  .top-actions { gap: 6px; }
+  .top-actions .btn { padding: 8px 7px; font-size: 8px; }
+}
+
+@media (min-width: 560px) {
+  body { font-size: 16px; }
+  .panel { padding: 20px; }
+  .btn { font-size: 11px; }
+  .btn-small { font-size: 9px; }
+  .playlist-list .btn { font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  .btn:active { transform: none; }
+}

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://js-cdn.music.apple.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.apple.com; frame-src https://*.apple.com; form-action 'self'; base-uri 'none'; object-src 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Cymbal on Website</title>
+  <meta name="description" content="Friends share music, talk about it, and keep three playlists in sync.">
+  <meta name="theme-color" content="#FFB84D">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='44' rx='44' ry='12' fill='%23D56062'/%3E%3Crect x='47' y='44' width='6' height='50' fill='%232b2b29'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="app.css">
+  <script src="theme.js"></script>
+  <script src="vendor/pocketbase.umd.js"></script>
+  <script src="pb-auth.js"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#feed">Skip to the feed</a>
+
+  <header class="top">
+    <div class="wrap top-inner">
+      <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span>CYMBAL <span class="brand-sub">ON WEBSITE</span></h1>
+      <div class="top-actions">
+        <button id="theme" class="btn btn-small" type="button">DARK</button>
+        <button id="signout" class="btn btn-small" type="button" hidden>SIGN OUT</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    <section id="gate" class="panel gate" hidden aria-labelledby="gate-title">
+      <h2 id="gate-title" class="label">FRIENDS ONLY</h2>
+      <p id="gate-text">Share songs, talk about them, and they all end up on one playlist on Spotify, Apple Music and YouTube. Sign in with your solhann.net account to see what everyone has posted.</p>
+      <button id="signin" class="btn btn-primary" type="button">SIGN IN</button>
+      <p id="gate-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <div id="app" hidden>
+      <nav class="playlists" aria-label="The three playlists">
+        <ul id="playlists" class="playlist-list"></ul>
+      </nav>
+
+      <form id="composer" class="panel composer" novalidate>
+        <label for="url" class="label">SONG LINK</label>
+        <input id="url" name="url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
+               maxlength="500" placeholder="Paste a Spotify, Apple Music or YouTube link" required>
+        <label for="caption" class="label">SAY SOMETHING <span class="label-note">optional</span></label>
+        <textarea id="caption" name="caption" rows="2" maxlength="500"></textarea>
+        <div class="composer-foot">
+          <span id="caption-count" class="count">0/500</span>
+          <button id="post" class="btn btn-primary" type="submit">POST</button>
+        </div>
+        <p class="hint">Posting tries to add the song to all three linked playlists.</p>
+        <p id="composer-status" class="status" role="status" aria-live="polite"></p>
+      </form>
+
+      <section id="owner" class="panel owner" hidden aria-labelledby="owner-title"></section>
+
+      <section id="feed" class="feed" aria-labelledby="feed-title" tabindex="-1">
+        <h2 id="feed-title" class="visually-hidden">Posts</h2>
+        <ol id="posts" class="posts"></ol>
+        <p id="feed-status" class="status feed-status" role="status" aria-live="polite"></p>
+        <button id="more" class="btn more" type="button" hidden>LOAD MORE</button>
+      </section>
+    </div>
+  </main>
+
+  <footer class="foot wrap">
+    <a href="privacy.html">Privacy</a>
+    <a href="terms.html">Terms</a>
+    <a href="https://create.solhann.net">solhann.net</a>
+  </footer>
+</body>
+</html>

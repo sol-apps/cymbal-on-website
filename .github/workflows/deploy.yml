@@ -1,0 +1,18 @@
+name: Deploy to solhann.net
+
+# Thin caller — the real pipeline lives once in sol-apps/workflows.
+# The repo name IS the slug IS the subdomain; nothing here is app-specific.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    uses: sol-apps/workflows/.github/workflows/deploy.yml@main
+    secrets: inherit

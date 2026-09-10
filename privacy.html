@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none'; object-src 'none'">
+  <title>Privacy — Cymbal on Website</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="app.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <h1 class="brand"><a href="./">CYMBAL <span class="brand-sub">ON WEBSITE</span></a></h1>
+      <div class="top-actions"><button id="theme" class="btn btn-small" type="button">DARK</button></div>
+    </div>
+  </header>
+  <main class="wrap">
+    <article class="panel doc">
+      <h2>PRIVACY</h2>
+      <p>Cymbal is a small, invite-only app run by the owner of solhann.net for a group of friends. This page says what it keeps, who can see it, and what leaves it.</p>
+
+      <h2>WHO CAN SEE WHAT</h2>
+      <ul>
+        <li>Only people the owner has given access to can sign in. Everyone signed in sees every post and comment, with the poster's display name.</li>
+        <li>Nobody else can read posts or comments. The page itself is public, but it shows nothing until you sign in.</li>
+        <li>The three playlists are not private: the Spotify one is public, the YouTube one is unlisted (anyone with the link), and the Apple Music one is shared publicly. They contain songs only, never who posted them or what anyone said.</li>
+      </ul>
+
+      <h2>WHAT CYMBAL STORES</h2>
+      <ul>
+        <li>Your display name and an internal account id from your solhann.net sign-in. Cymbal never shows your email address to anyone.</li>
+        <li>Each post: the link you shared, your optional caption, the track's title, artist, length and ISRC as looked up from the music service, and when you posted.</li>
+        <li>Each comment and when you wrote it.</li>
+        <li>For the owner's accounts only: the authorisation that lets Cymbal add songs to the owner's Spotify and YouTube playlists, stored encrypted. Friends never connect a music account.</li>
+        <li>Records of what has been added to each playlist, so a song is only ever added once.</li>
+      </ul>
+
+      <h2>WHAT LEAVES CYMBAL</h2>
+      <p>To find a song on the other services, Cymbal sends track identifiers, titles, artist names and ISRCs to Spotify, Apple Music (including Apple's public iTunes lookup), YouTube and MusicBrainz. It sends nothing about you: not your name, not your caption, not your comments.</p>
+      <p>Apple Music additions happen in the owner's own browser. Apple's authorisation for that stays in that browser and is never sent to Cymbal's server.</p>
+
+      <h2>DELETING THINGS</h2>
+      <ul>
+        <li>You can remove your own posts and comments; the owner can remove any. Removing blanks the text and hides it straight away.</li>
+        <li>A song that has already reached a playlist stays on that playlist. Playlists only ever grow in this version.</li>
+        <li>Anything not yet added when you remove a post is cancelled.</li>
+      </ul>
+
+      <h2>KEEPING IT</h2>
+      <p>Data lives on the solhann.net server and in its nightly backups, kept for a week. Ask the owner if you want your account's posts and comments removed entirely.</p>
+      <p><a href="./">Back to Cymbal</a> <a href="terms.html">Terms</a></p>
+    </article>
+  </main>
+</body>
+</html>
