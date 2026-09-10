@@ -1,19 +1,25 @@
 /// <reference path="../../pb_data/types.d.ts" />
 /*
- * lib/feed.js — posts, comments and the feed: everything a friend reads or writes.
+ * lib/feed.js — posts, comments and the feed: everything a visitor reads or writes.
  *
- * The collections are superuser-only at the rule level, so this module is the only
- * way in. What it guarantees, and what the routes rely on:
- *   - nothing returned carries an author id, an email, a token or a provider
- *     response; a reader gets a display name and a `mine` flag computed against
- *     their own id;
- *   - every write is attributed to the authenticated caller and rate-limited, with
- *     deleted rows counted;
- *   - replaying a request_id returns the original result, never a second row.
+ * Nobody signs in to post. A writer is a typed name plus the hash of their browser's
+ * private key (util.writerKey); the key is what lets that browser remove its own
+ * posts. The collections are superuser-only at the rule level, so this module is the
+ * only way in, and it guarantees:
+ *   - nothing returned carries a key hash, an address hash or a provider response;
+ *     a reader gets the typed name and a `mine` flag computed against their own key;
+ *   - every write is rate-limited per browser key and per network, deleted rows
+ *     counted;
+ *   - replaying a request_id from the same browser returns the original result.
  */
 
 const PAGE = 15;
 const STATE = { pending: "pending", pending_device: "pending", synced: "synced", attention: "attention", cancelled: "cancelled" };
+
+const LIMITS = {
+  posts: { key: 10, ip: 30, noun: "posts" },
+  comments: { key: 60, ip: 180, noun: "comments" },
+};
 
 function util() {
   return require(__hooks + "/lib/util.js");
@@ -21,14 +27,6 @@ function util() {
 
 function urls() {
   return require(__hooks + "/lib/urls.js");
-}
-
-function usersById(app, ids) {
-  const out = {};
-  const unique = ids.filter((id, i) => id && ids.indexOf(id) === i);
-  if (!unique.length) return out;
-  app.findRecordsByIds("users", unique).forEach((u) => { if (u) out[u.id] = u; });
-  return out;
 }
 
 function syncsByPost(app, postIds) {
@@ -56,9 +54,9 @@ function syncView(rows) {
   return out;
 }
 
-function postView(rec, author, syncs, callerId, owner) {
+function postView(rec, syncs, keyHash, owner) {
   const u = util();
-  const mine = !!callerId && rec.getString("author") === callerId;
+  const mine = !!keyHash && rec.getString("author_key") === keyHash;
   const meta = rec.getString("meta_status");
   const source = rec.getString("source_provider");
   return {
@@ -70,7 +68,7 @@ function postView(rec, author, syncs, callerId, owner) {
     source_label: u.LABELS[source] || source,
     url: rec.getString("canonical_url"),
     caption: rec.getString("caption"),
-    poster: u.displayName(author),
+    poster: rec.getString("pseudonym") || "someone",
     mine: mine,
     can_delete: mine || owner,
     created: rec.getString("created"),
@@ -84,17 +82,27 @@ function postView(rec, author, syncs, callerId, owner) {
 function views(app, rows, e) {
   const u = util();
   const owner = u.isOwner(e);
-  const authors = usersById(app, rows.map((r) => r.getString("author")));
+  const keyHash = u.writerKey(e, false);
   const syncs = syncsByPost(app, rows.map((r) => r.id));
-  return rows.map((r) => postView(r, authors[r.getString("author")], syncs[r.id], e.auth.id, owner));
+  return rows.map((r) => postView(r, syncs[r.id], keyHash, owner));
 }
 
 function livePost(app, id) {
   if (!/^[a-z0-9]{15}$/.test(String(id || ""))) throw new NotFoundError("No such post.");
-  const u = util();
-  const post = u.findOne(app, "posts", "id = {:id} && deleted = false", { id: id });
+  const post = util().findOne(app, "posts", "id = {:id} && deleted = false", { id: id });
   if (!post) throw new NotFoundError("No such post.");
   return post;
+}
+
+// Both limits in the writer's own transaction, so two quick requests cannot both
+// slip under them.
+function limit(tx, collection, keyHash, ip) {
+  const u = util();
+  const l = LIMITS[collection];
+  u.enforceRate(tx, collection, "author_key", keyHash, l.key,
+    "That's " + l.key + " " + l.noun + " in the last hour. Give it a little while.");
+  u.enforceRate(tx, collection, "ip_hash", ip, l.ip,
+    "Lots of " + l.noun + " from your network in the last hour. Give it a little while.");
 }
 
 // GET /api/cymbal/feed?cursor=<post id>
@@ -123,31 +131,35 @@ function postById(app, e, id) {
   return views(app, [app.findRecordById("posts", id)], e)[0];
 }
 
-function findReplay(app, collection, authorId, rid) {
-  return util().findOne(app, collection, "author = {:a} && request_id = {:r}", { a: authorId, r: rid });
+function findReplay(app, collection, keyHash, rid) {
+  return util().findOne(app, collection, "author_key = {:k} && request_id = {:r}", { k: keyHash, r: rid });
 }
 
-// POST /api/cymbal/posts {url, caption, request_id}
+// POST /api/cymbal/posts {url, name, caption, request_id}
 function createPost(app, e) {
   const u = util();
   const body = e.requestInfo().body || {};
-  const authorId = e.auth.id;
+  const keyHash = u.writerKey(e, true);
   const rid = u.requestId(body.request_id);
 
-  const replay = findReplay(app, "posts", authorId, rid);
+  const replay = findReplay(app, "posts", keyHash, rid);
   if (replay) return { replayed: true, post: postById(app, e, replay.id) };
 
   const parsed = urls().parseTrackUrl(body.url);
   if (!parsed.ok) throw new BadRequestError(parsed.message);
   const caption = u.cleanText(body.caption, 500, "A caption");
+  const name = u.pseudonym(body.name);
+  const ip = u.ipHash(e);
 
   let postId = "";
   try {
     app.runInTransaction((tx) => {
-      u.enforceRate(tx, "posts", authorId, 10, "posts");
+      limit(tx, "posts", keyHash, ip);
       const now = u.pbTime(Date.now());
       const post = new Record(tx.findCollectionByNameOrId("posts"));
-      post.set("author", authorId);
+      post.set("pseudonym", name);
+      post.set("author_key", keyHash);
+      post.set("ip_hash", ip);
       post.set("source_provider", parsed.provider);
       post.set("source_id", parsed.id);
       post.set("storefront", parsed.storefront || "");
@@ -185,7 +197,7 @@ function createPost(app, e) {
     });
   } catch (err) {
     // Two copies of one request racing: the loser hits the unique index.
-    const again = findReplay(app, "posts", authorId, rid);
+    const again = findReplay(app, "posts", keyHash, rid);
     if (again) return { replayed: true, post: postById(app, e, again.id) };
     throw err;
   }
@@ -200,13 +212,14 @@ function createPost(app, e) {
   return { replayed: false, post: postById(app, e, postId) };
 }
 
-// DELETE /api/cymbal/posts/{id}
+// DELETE /api/cymbal/posts/{id} — the browser that wrote it, or the owner.
 function deletePost(app, e, id) {
   const u = util();
   if (!/^[a-z0-9]{15}$/.test(String(id || ""))) throw new NotFoundError("No such post.");
   const post = u.findOne(app, "posts", "id = {:id}", { id: id });
   if (!post) throw new NotFoundError("No such post.");
-  const byAuthor = post.getString("author") === e.auth.id;
+  const keyHash = u.writerKey(e, false);
+  const byAuthor = !!keyHash && post.getString("author_key") === keyHash;
   if (!byAuthor && !u.isOwner(e)) throw new ForbiddenError("You can only remove your own posts.");
   if (post.getBool("deleted")) return { ok: true };
 
@@ -231,13 +244,12 @@ function deletePost(app, e, id) {
   return { ok: true };
 }
 
-function commentView(rec, author, callerId, owner) {
-  const u = util();
-  const mine = rec.getString("author") === callerId;
+function commentView(rec, keyHash, owner) {
+  const mine = !!keyHash && rec.getString("author_key") === keyHash;
   return {
     id: rec.id,
     body: rec.getString("body"),
-    poster: u.displayName(author),
+    poster: rec.getString("pseudonym") || "someone",
     mine: mine,
     can_delete: mine || owner,
     created: rec.getString("created"),
@@ -255,33 +267,37 @@ function listComments(app, e, postId) {
   const u = util();
   const post = livePost(app, postId);
   const rows = app.findRecordsByFilter("comments", "post = {:p} && deleted = false", "created,id", 200, 0, { p: post.id });
-  const authors = usersById(app, rows.map((r) => r.getString("author")));
+  const keyHash = u.writerKey(e, false);
   const owner = u.isOwner(e);
-  return { comments: rows.map((r) => commentView(r, authors[r.getString("author")], e.auth.id, owner)) };
+  return { comments: rows.map((r) => commentView(r, keyHash, owner)) };
 }
 
-// POST /api/cymbal/posts/{id}/comments {body, request_id}
+// POST /api/cymbal/posts/{id}/comments {body, name, request_id}
 function createComment(app, e, postId) {
   const u = util();
   const body = e.requestInfo().body || {};
-  const authorId = e.auth.id;
+  const keyHash = u.writerKey(e, true);
   const rid = u.requestId(body.request_id);
   const owner = u.isOwner(e);
 
-  const replay = findReplay(app, "comments", authorId, rid);
-  if (replay) return { replayed: true, comment: commentView(replay, e.auth, authorId, owner) };
+  const replay = findReplay(app, "comments", keyHash, rid);
+  if (replay) return { replayed: true, comment: commentView(replay, keyHash, owner) };
 
   const post = livePost(app, postId);
   const text = u.cleanText(body.body, 1000, "A comment");
   if (!text) throw new BadRequestError("A comment needs something in it.");
+  const name = u.pseudonym(body.name);
+  const ip = u.ipHash(e);
 
   let id = "";
   try {
     app.runInTransaction((tx) => {
-      u.enforceRate(tx, "comments", authorId, 60, "comments");
+      limit(tx, "comments", keyHash, ip);
       const c = new Record(tx.findCollectionByNameOrId("comments"));
       c.set("post", post.id);
-      c.set("author", authorId);
+      c.set("pseudonym", name);
+      c.set("author_key", keyHash);
+      c.set("ip_hash", ip);
       c.set("body", text);
       c.set("request_id", rid);
       c.set("deleted", false);
@@ -290,11 +306,11 @@ function createComment(app, e, postId) {
       id = c.id;
     });
   } catch (err) {
-    const again = findReplay(app, "comments", authorId, rid);
-    if (again) return { replayed: true, comment: commentView(again, e.auth, authorId, owner) };
+    const again = findReplay(app, "comments", keyHash, rid);
+    if (again) return { replayed: true, comment: commentView(again, keyHash, owner) };
     throw err;
   }
-  return { replayed: false, comment: commentView(app.findRecordById("comments", id), e.auth, authorId, owner) };
+  return { replayed: false, comment: commentView(app.findRecordById("comments", id), keyHash, owner) };
 }
 
 // DELETE /api/cymbal/comments/{id}
@@ -303,7 +319,8 @@ function deleteComment(app, e, id) {
   if (!/^[a-z0-9]{15}$/.test(String(id || ""))) throw new NotFoundError("No such comment.");
   const c = u.findOne(app, "comments", "id = {:id}", { id: id });
   if (!c) throw new NotFoundError("No such comment.");
-  const byAuthor = c.getString("author") === e.auth.id;
+  const keyHash = u.writerKey(e, false);
+  const byAuthor = !!keyHash && c.getString("author_key") === keyHash;
   if (!byAuthor && !u.isOwner(e)) throw new ForbiddenError("You can only remove your own comments.");
   if (c.getBool("deleted")) return { ok: true };
   app.runInTransaction((tx) => {

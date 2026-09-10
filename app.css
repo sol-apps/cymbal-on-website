@@ -215,7 +215,13 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 
 .composer { display: grid; gap: 4px; }
 .composer label + input, .composer label + textarea { margin-bottom: 10px; }
-.composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.composer label + textarea { margin-bottom: 2px; }
+.composer .count { text-align: right; margin-bottom: 8px; }
+.composer-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.name-field { flex: 1 1 auto; min-width: 0; }
+.composer .name-field input { margin-bottom: 0; }
+.comment-form .row input { flex: 1 1 140px; min-width: 0; }
+.foot .foot-btn { color: inherit; font-size: 13px; text-decoration: underline; }
 
 /* ── feed ───────────────────────────────────────────────────────────────── */
 

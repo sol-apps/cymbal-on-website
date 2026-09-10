@@ -27,12 +27,22 @@ test("every page has a CSP and no inline script", () => {
   }
 });
 
-test("the identity layer is byte-identical to the platform template", (t) => {
-  const tpl = path.join(root, "..", "platform", "greenlight", "app-template");
-  if (!fs.existsSync(tpl)) return t.skip("platform template not beside this checkout");
-  const sha = (p) => crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
+// Against the template as COMMITTED, not the working tree: another session's
+// unreviewed edits to the template must neither fail this app nor be mistaken for
+// the version this app should carry.
+test("the identity layer is byte-identical to the committed platform template", (t) => {
+  const platform = path.join(root, "..", "platform");
+  if (!fs.existsSync(path.join(platform, "greenlight", "app-template"))) return t.skip("platform template not beside this checkout");
+  const { execFileSync } = require("node:child_process");
+  const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
   for (const f of ["pb-auth.js", "pb_hooks/identity.pb.js", "pb_migrations/1756540000_identity.js", "vendor/pocketbase.umd.js"]) {
-    assert.equal(sha(path.join(root, f)), sha(path.join(tpl, f)), f + " differs from the template");
+    let committed;
+    try {
+      committed = execFileSync("git", ["-C", platform, "show", "HEAD:greenlight/app-template/" + f], { maxBuffer: 1 << 26 });
+    } catch (_) {
+      committed = fs.readFileSync(path.join(platform, "greenlight", "app-template", f));
+    }
+    assert.equal(sha(fs.readFileSync(path.join(root, f))), sha(committed), f + " differs from the committed template");
   }
 });
 

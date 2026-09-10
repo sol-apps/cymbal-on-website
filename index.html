@@ -32,47 +32,43 @@
   </header>
 
   <main id="main" class="wrap">
-    <section id="gate" class="panel gate" hidden aria-labelledby="gate-title">
-      <h2 id="gate-title" class="label">FRIENDS ONLY</h2>
-      <p id="gate-text">Share songs, talk about them, and they all end up on one playlist on Spotify, Apple Music and YouTube. Sign in with your solhann.net account to see what everyone has posted.</p>
-      <button id="signin" class="btn btn-primary" type="button">SIGN IN</button>
-      <p id="gate-status" class="status" role="status" aria-live="polite"></p>
-    </section>
+    <nav class="playlists" aria-label="The three playlists">
+      <ul id="playlists" class="playlist-list"></ul>
+    </nav>
 
-    <div id="app" hidden>
-      <nav class="playlists" aria-label="The three playlists">
-        <ul id="playlists" class="playlist-list"></ul>
-      </nav>
-
-      <form id="composer" class="panel composer" novalidate>
-        <label for="url" class="label">SONG LINK</label>
-        <input id="url" name="url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
-               maxlength="500" placeholder="Paste a Spotify, Apple Music or YouTube link" required>
-        <label for="caption" class="label">SAY SOMETHING <span class="label-note">optional</span></label>
-        <textarea id="caption" name="caption" rows="2" maxlength="500"></textarea>
-        <div class="composer-foot">
-          <span id="caption-count" class="count">0/500</span>
-          <button id="post" class="btn btn-primary" type="submit">POST</button>
+    <form id="composer" class="panel composer" novalidate>
+      <label for="url" class="label">SONG LINK</label>
+      <input id="url" name="url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
+             maxlength="500" placeholder="Paste a Spotify, Apple Music or YouTube link" required>
+      <label for="caption" class="label">SAY SOMETHING <span class="label-note">optional</span></label>
+      <textarea id="caption" name="caption" rows="2" maxlength="500"></textarea>
+      <span id="caption-count" class="count">0/500</span>
+      <div class="composer-foot">
+        <div class="name-field">
+          <label for="name" class="label">YOUR NAME</label>
+          <input id="name" name="name" type="text" maxlength="32" autocomplete="nickname" required>
         </div>
-        <p class="hint">Posting tries to add the song to all three linked playlists.</p>
-        <p id="composer-status" class="status" role="status" aria-live="polite"></p>
-      </form>
+        <button id="post" class="btn btn-primary" type="submit">POST</button>
+      </div>
+      <p class="hint">Posting tries to add the song to all three linked playlists.</p>
+      <p id="composer-status" class="status" role="status" aria-live="polite"></p>
+    </form>
 
-      <section id="owner" class="panel owner" hidden aria-labelledby="owner-title"></section>
+    <section id="owner" class="panel owner" hidden aria-labelledby="owner-title"></section>
 
-      <section id="feed" class="feed" aria-labelledby="feed-title" tabindex="-1">
-        <h2 id="feed-title" class="visually-hidden">Posts</h2>
-        <ol id="posts" class="posts"></ol>
-        <p id="feed-status" class="status feed-status" role="status" aria-live="polite"></p>
-        <button id="more" class="btn more" type="button" hidden>LOAD MORE</button>
-      </section>
-    </div>
+    <section id="feed" class="feed" aria-labelledby="feed-title" tabindex="-1">
+      <h2 id="feed-title" class="visually-hidden">Posts</h2>
+      <ol id="posts" class="posts"></ol>
+      <p id="feed-status" class="status feed-status" role="status" aria-live="polite"></p>
+      <button id="more" class="btn more" type="button" hidden>LOAD MORE</button>
+    </section>
   </main>
 
   <footer class="foot wrap">
     <a href="privacy.html">Privacy</a>
     <a href="terms.html">Terms</a>
     <a href="https://create.solhann.net">solhann.net</a>
+    <button id="owner-signin" class="link-btn foot-btn" type="button">Owner</button>
   </footer>
 </body>
 </html>

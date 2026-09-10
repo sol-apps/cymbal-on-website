@@ -1,13 +1,15 @@
 /* app.js — Cymbal's page. Plain DOM, no framework, no build step.
  *
- * Every piece of text that came from a person or a provider — captions, comments,
- * names, track titles — reaches the page through textContent (h() below) and is
+ * Every piece of text that came from a person or a provider — names, captions,
+ * comments, track titles — reaches the page through textContent (h() below) and is
  * never parsed as HTML. Links are only ever https URLs the server built from
  * validated ids.
  *
- * Sessions are thirty minutes and are never renewed silently (pb-auth.js). When one
- * lapses the page shows its sign-in control and waits for a click, because a popup
- * opened without one is blocked.
+ * Nobody signs in to post. This browser gets a random private key the first time the
+ * page loads and sends it as X-Cymbal-Key; the server stores only its hash, and it is
+ * what lets this browser remove its own posts. The typed name is remembered here.
+ * The owner signs in from the footer for the owner panel; that session is thirty
+ * minutes and never renewed silently (pb-auth.js).
  */
 (() => {
   "use strict";
@@ -60,11 +62,14 @@
     el.classList.toggle("is-ok", kind === "ok");
   }
 
-  function requestId() {
-    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    const a = new Uint8Array(16);
+  function randomHex(bytes) {
+    const a = new Uint8Array(bytes);
     crypto.getRandomValues(a);
     return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function requestId() {
+    return window.crypto && crypto.randomUUID ? crypto.randomUUID() : randomHex(16);
   }
 
   function when(stamp) {
@@ -83,12 +88,37 @@
     return isNaN(t) ? "" : new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   }
 
+  // ── this browser: its key and its name ───────────────────────────────────
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k) || ""; } catch (_) { return ""; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* storage blocked */ } },
+  };
+  let memoryKey = "";
+
+  // Where storage is blocked the key lives for this page only, so posts made then
+  // can't be removed from this browser later. Nothing else changes.
+  function browserKey() {
+    let key = store.get("cymbal_key");
+    if (!/^[A-Za-z0-9_-]{32,128}$/.test(key)) {
+      key = memoryKey || randomHex(32);
+      memoryKey = key;
+      store.set("cymbal_key", key);
+    }
+    return key;
+  }
+
+  function savedName() { return store.get("cymbal_name"); }
+  function rememberName(name) { if (name) store.set("cymbal_name", name); }
+
   async function api(path, opts) {
+    const o = Object.assign({ method: "GET" }, opts || {});
+    o.headers = Object.assign({ "X-Cymbal-Key": browserKey() }, o.headers || {});
     try {
-      return await pb.send(path, Object.assign({ method: "GET" }, opts || {}));
+      return await pb.send(path, o);
     } catch (err) {
       const status = err && err.status;
-      if (status === 401) PBAuth.signOut();
+      if (status === 401 && PBAuth.isSignedIn()) PBAuth.signOut();
       const msg = (err && err.response && err.response.message) ||
         (status === 0 ? "Couldn't reach Cymbal. Check your connection." : "Something went wrong. Try again.");
       const e = new Error(msg);
@@ -97,58 +127,8 @@
     }
   }
 
-  // ── sign-in state ─────────────────────────────────────────────────────────
-
-  // null, not "": the first onChange call must always render, and signed-out is "".
-  let currentUser = null;
-  let wasSignedIn = false;
-
-
-  $("signin").addEventListener("click", async () => {
-    const btn = $("signin");
-    btn.disabled = true;
-    say("gate-status", "Opening sign-in…");
-    try {
-      await PBAuth.signIn();
-      say("gate-status", "");
-    } catch (err) {
-      say("gate-status", "Sign-in didn't complete. If you haven't been given access to Cymbal yet, ask the owner.", "error");
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  $("signout").addEventListener("click", () => {
-    wasSignedIn = false;
-    PBAuth.signOut();
-    say("gate-status", "Signed out.");
-  });
-
   let pollTimer = null;
   let appleTimer = null;
-
-  function start() {
-    loadPlaylists();
-    loadFeed(true);
-    if (PBAuth.isAdmin()) loadOwner();
-    else $("owner").hidden = true;
-    clearInterval(pollTimer);
-    pollTimer = setInterval(() => { if (!document.hidden) refreshTop(); }, 45000);
-    const q = new URLSearchParams(location.search);
-    const done = q.get("connected");
-    const failed = q.get("connect");
-    if (done && LABELS[done]) say("composer-status", LABELS[done] + " connected.", "ok");
-    else if (failed === "denied") say("composer-status", "Connection was cancelled.", "error");
-    else if (failed) say("composer-status", "That connection didn't complete. Try again from the owner panel.", "error");
-    if (done || failed) history.replaceState(null, "", location.pathname);
-  }
-
-  function stop() {
-    clearInterval(pollTimer);
-    clearInterval(appleTimer);
-    pollTimer = null;
-    appleTimer = null;
-  }
 
   // ── playlists ─────────────────────────────────────────────────────────────
 
@@ -169,6 +149,7 @@
   // dropped connection returns the original post instead of creating a second one.
   let postRid = null;
 
+  $("name").value = savedName();
   $("url").addEventListener("input", () => { postRid = null; });
   $("caption").addEventListener("input", () => {
     $("caption-count").textContent = $("caption").value.length + "/500";
@@ -177,9 +158,15 @@
   $("composer").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const url = $("url").value.trim();
+    const name = $("name").value.trim();
     if (!url) {
       say("composer-status", "Paste a song link first.", "error");
       $("url").focus();
+      return;
+    }
+    if (name.length < 2) {
+      say("composer-status", "Add your name.", "error");
+      $("name").focus();
       return;
     }
     if (!postRid) postRid = requestId();
@@ -189,10 +176,12 @@
     try {
       const res = await api("/api/cymbal/posts", {
         method: "POST",
-        body: { url: url, caption: $("caption").value, request_id: postRid },
+        body: { url: url, name: name, caption: $("caption").value, request_id: postRid },
       });
       postRid = null;
-      $("composer").reset();
+      rememberName(name);
+      $("url").value = "";
+      $("caption").value = "";
       $("caption-count").textContent = "0/500";
       upsertCard(res.post, true);
       say("composer-status", res.replayed ? "Already posted." : "Posted. It'll be added to the playlists shortly.", "ok");
@@ -355,23 +344,29 @@
     let rid = null;
     const id = "cf-" + postId;
     const input = h("textarea", { id: id, rows: "2", maxlength: "1000", required: true });
+    const name = h("input", { type: "text", maxlength: "32", autocomplete: "nickname", placeholder: "Your name", "aria-label": "Your name" });
+    name.value = savedName();
     const status = h("p", { class: "status", role: "status", "aria-live": "polite" });
     const btn = h("button", { class: "btn btn-small btn-primary", type: "submit" }, "SEND");
     input.addEventListener("input", () => { rid = null; });
     const form = h("form", { class: "comment-form", novalidate: true },
       h("label", { class: "visually-hidden", for: id }, "Write a comment"),
-      input, h("div", { class: "row" }, btn), status);
+      input, h("div", { class: "row" }, name, btn), status);
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const body = input.value.trim();
+      const who = name.value.trim();
       if (!body) { status.textContent = "Write something first."; input.focus(); return; }
+      if (who.length < 2) { status.textContent = "Add your name."; name.focus(); return; }
       if (!rid) rid = requestId();
       btn.disabled = true;
       try {
         const res = await api("/api/cymbal/posts/" + encodeURIComponent(postId) + "/comments", {
-          method: "POST", body: { body: body, request_id: rid },
+          method: "POST", body: { body: body, name: who, request_id: rid },
         });
         rid = null;
+        rememberName(who);
+        if (!$("name").value) $("name").value = who;
         input.value = "";
         status.textContent = "";
         if (!res.replayed) {
@@ -389,7 +384,21 @@
     return form;
   }
 
-  // ── owner panel ───────────────────────────────────────────────────────────
+  // ── the owner ─────────────────────────────────────────────────────────────
+
+  $("owner-signin").addEventListener("click", async () => {
+    const btn = $("owner-signin");
+    btn.disabled = true;
+    try {
+      await PBAuth.signIn();
+    } catch (err) {
+      say("composer-status", "Owner sign-in didn't complete.", "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("signout").addEventListener("click", () => PBAuth.signOut());
 
   const REASONS = {
     waiting_for_source: "waiting for track details",
@@ -415,10 +424,12 @@
     }
     const status = h("p", { id: "owner-status", class: "status", role: "status", "aria-live": "polite" });
     const attention = h("div", { id: "owner-attention" });
-    const details = h("details", { open: sessionStorage.getItem("cymbal_owner_open") === "1" ? true : null },
+    let open = false;
+    try { open = sessionStorage.getItem("cymbal_owner_open") === "1"; } catch (_) { /* ignore */ }
+    const details = h("details", { open: open ? true : null },
       h("summary", { id: "owner-title" }, "OWNER PANEL"),
       h("div", { class: "owner-grid" },
-        s.providers.map((p) => providerCard(p, s)),
+        s.providers.map((p) => providerCard(p)),
         h("div", { class: "row" },
           h("button", { class: "btn btn-small", type: "button", onclick: runNow }, "SYNC NOW"),
           h("button", { class: "btn btn-small", type: "button", onclick: loadOwner }, "REFRESH")),
@@ -542,7 +553,7 @@
     return h("li", null,
       h("strong", null, (r.post ? (r.post.title || "Untitled") + (r.post.artist ? " by " + r.post.artist : "") : "Removed post") + " to " + r.target_label),
       r.post ? h("span", { class: "small" }, extLink(r.post.url, "original link")) : null,
-      h("span", null, r.detail || r.reason),
+      h("span", null, r.detail || REASONS[r.reason] || r.reason),
       steps ? h("span", { class: "small" }, "Tried " + steps) : null,
       form,
       h("div", { class: "row" }, h("button", { class: "btn btn-small", type: "button", onclick: async () => {
@@ -589,9 +600,7 @@
       music = MK.getInstance();
     }
     if (!music.isAuthorized && interactive) await music.authorize();
-    if (music.isAuthorized) {
-      try { localStorage.setItem("cymbal_apple_authorised", "1"); } catch (_) { /* ignore */ }
-    }
+    if (music.isAuthorized) store.set("cymbal_apple_authorised", "1");
     return music.isAuthorized;
   }
 
@@ -622,9 +631,7 @@
   // Only load Apple's script automatically on a browser that has been authorised
   // before; anywhere else it waits for the button.
   async function appleAutoStart() {
-    let before = null;
-    try { before = localStorage.getItem("cymbal_apple_authorised"); } catch (_) { /* ignore */ }
-    if (before !== "1") return;
+    if (store.get("cymbal_apple_authorised") !== "1") return;
     try {
       if (await appleSetup(false)) await appleAfterAuth();
     } catch (_) { /* the button remains */ }
@@ -750,27 +757,43 @@
     }
   }
 
-  // ── boot ──────────────────────────────────────────────────────────────────
-  // Last, on purpose: onChange calls back immediately, and start() touches state
-  // declared throughout this file. Registered any earlier, it reads those
-  // `let`s before they exist.
+  function stopApple() {
+    clearInterval(appleTimer);
+    appleTimer = null;
+  }
 
+  // ── boot ──────────────────────────────────────────────────────────────────
+  // Last, on purpose: everything below touches state declared throughout this file.
+
+  loadPlaylists();
+  loadFeed(true);
+  pollTimer = setInterval(() => { if (!document.hidden) refreshTop(); }, 45000);
+
+  const q = new URLSearchParams(location.search);
+  const done = q.get("connected");
+  const failed = q.get("connect");
+  if (done && LABELS[done]) say("composer-status", LABELS[done] + " connected.", "ok");
+  else if (failed === "denied") say("composer-status", "Connection was cancelled.", "error");
+  else if (failed) say("composer-status", "That connection didn't complete. Try again from the owner panel.", "error");
+  if (done || failed) history.replaceState(null, "", location.pathname);
+
+  // onChange calls back immediately with the current session, then on every change.
+  // Only the owner ever signs in; anyone else's session is simply ignored.
+  let ownerState = null;
   PBAuth.onChange((user) => {
-    const id = user ? user.id : "";
-    if (id === currentUser) return;
-    currentUser = id;
-    if (user) {
-      wasSignedIn = true;
-      $("gate").hidden = true;
-      $("app").hidden = false;
-      $("signout").hidden = false;
-      start();
+    const owner = !!user && user.role === "admin";
+    $("signout").hidden = !user;
+    $("owner-signin").hidden = !!user;
+    if (owner) {
+      loadOwner();
     } else {
-      stop();
-      $("app").hidden = true;
-      $("signout").hidden = true;
-      $("gate").hidden = false;
-      if (wasSignedIn) say("gate-status", "Your session ended. Sign in again to carry on.");
+      $("owner").hidden = true;
+      $("owner").replaceChildren();
+      stopApple();
+      if (user) say("composer-status", "That account isn't Cymbal's owner.", "error");
     }
+    // Remove buttons depend on who is looking, so redraw when that changes.
+    if (ownerState !== null && ownerState !== owner) loadFeed(true);
+    ownerState = owner;
   });
 })();

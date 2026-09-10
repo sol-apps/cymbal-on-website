@@ -7,55 +7,55 @@
  * is require()d inside each handler.
  *
  * Who reaches what:
- *   - every /api/cymbal/* data route requires a signed-in `users` record. Only people
- *     granted access on id-admin can get one: the identity provider refuses anyone
- *     else an authorization code, so they never reach this app at all.
- *   - /api/cymbal/owner/* additionally requires users.role = "admin", which the
- *     identity layer writes from the provider's claim on every login.
- *   - /api/cymbal/oauth/{provider}/callback is the single unauthenticated route; it
- *     is authenticated by a single-use state bound to the owner (lib/owner.js).
+ *   - the feed, posts, comments and playlist links are open: anyone with the link
+ *     reads, and posts under a typed name. A browser's private key (X-Cymbal-Key)
+ *     is what lets it remove its own posts; rate limits are per key and per network.
+ *   - /api/cymbal/owner/* requires a signed-in `users` record with role "admin".
+ *     Only the owner signs in, through id.solhann.net, and only for this panel;
+ *     the identity layer (identity.pb.js) writes that role from the provider's
+ *     claim on every login.
+ *   - /api/cymbal/oauth/{provider}/callback is authenticated by a single-use state
+ *     bound to the owner (lib/owner.js).
  *   - the collections themselves are superuser-only (every API rule null), so none
  *     of this data is reachable through /api/collections/*.
- *
- * Identity (identity.pb.js) is a separate, protected file and is not touched here.
  */
 
-// ── friends ─────────────────────────────────────────────────────────────────
+// ── everyone ────────────────────────────────────────────────────────────────
 
 routerAdd("GET", "/api/cymbal/feed", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.feed(e.app, e));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("POST", "/api/cymbal/posts", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.createPost(e.app, e));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("DELETE", "/api/cymbal/posts/{id}", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.deletePost(e.app, e, e.request.pathValue("id")));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("GET", "/api/cymbal/posts/{id}/comments", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.listComments(e.app, e, e.request.pathValue("id")));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("POST", "/api/cymbal/posts/{id}/comments", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.createComment(e.app, e, e.request.pathValue("id")));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("DELETE", "/api/cymbal/comments/{id}", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.deleteComment(e.app, e, e.request.pathValue("id")));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("GET", "/api/cymbal/playlists", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.playlists(e.app));
-}, $apis.requireAuth("users"));
+});
 
 // ── owner ───────────────────────────────────────────────────────────────────
 

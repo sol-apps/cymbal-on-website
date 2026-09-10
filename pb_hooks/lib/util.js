@@ -1,7 +1,7 @@
 /// <reference path="../../pb_data/types.d.ts" />
 /*
- * lib/util.js — what every route and the worker share: time, text, ids, secrets,
- * rate limits and provider endpoints.
+ * lib/util.js — what every route and the worker share: time, text, ids, the writer's
+ * browser key, secrets, rate limits and provider endpoints.
  *
  * Handlers run in isolated pooled VMs, so nothing at the top of a .pb.js file is
  * visible inside a handler; this module is require()d inside each one instead.
@@ -42,18 +42,42 @@ function requestId(value) {
   return id;
 }
 
+// The name a writer typed. It is a label, not an identity: nothing checks it.
+function pseudonym(value) {
+  const name = cleanText(value, 32, "A name").replace(/\s+/g, " ");
+  if (name.length < 2) throw new BadRequestError("Pick a name of at least 2 characters.");
+  return name;
+}
+
+// The browser's private key, sent as X-Cymbal-Key. Only its sha256 is stored; it is
+// what proves "this browser wrote that" when someone removes their own post.
+function writerKey(e, required) {
+  const key = String(e.request.header.get("X-Cymbal-Key") || "");
+  if (!key) {
+    if (required) throw new BadRequestError("Your browser key is missing. Reload the page and try again.");
+    return "";
+  }
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(key)) throw new BadRequestError("Your browser key is malformed. Reload the page.");
+  return $security.sha256(key);
+}
+
+// A salted hash of the client address, for rate limits only. Behind Cloudflare,
+// CF-Connecting-IP is the client; if the origin were reached directly it could be
+// forged, which would only loosen a rate limit, never grant anything.
+function ipHash(e) {
+  let ip = String(e.request.header.get("CF-Connecting-IP") || "");
+  if (!ip) {
+    try { ip = String(e.realIP() || ""); } catch (_) { ip = ""; }
+  }
+  return ip ? $security.sha256("cymbal-ip:" + tokenKey() + ":" + ip) : "";
+}
+
 function isOwner(e) {
-  return !!e.auth && e.auth.getString("role") === "admin";
+  return !!e.auth && e.auth.collection().name === "users" && e.auth.getString("role") === "admin";
 }
 
 function requireOwner(e) {
   if (!isOwner(e)) throw new ForbiddenError("Only the owner can do that.");
-}
-
-function displayName(user) {
-  if (!user) return "a friend";
-  const name = String(user.getString("name") || "").trim();
-  return name ? name.slice(0, 60) : "a friend";
 }
 
 function env(name, fallback) {
@@ -122,14 +146,14 @@ function spotifyTransferAllowed() {
   return $os.getenv("CYMBAL_SPOTIFY_METADATA_TRANSFER") === "allowed";
 }
 
-// Counts deleted rows too: deleting a post must not buy another one.
-function enforceRate(app, collection, authorId, limit, noun) {
+// Counts deleted rows too: deleting a post must not buy another one. `field` is
+// always a column name from this code, never from a request.
+function enforceRate(app, collection, field, value, limit, message) {
+  if (!value) return;
   const since = pbTime(Date.now() - 3600 * 1000);
   const n = app.countRecords(collection,
-    $dbx.exp("author = {:a} AND created >= {:s}", { a: authorId, s: since }));
-  if (n >= limit) {
-    throw new TooManyRequestsError("That's " + limit + " " + noun + " in the last hour. Give it a little while.");
-  }
+    $dbx.exp(field + " = {:v} AND created >= {:s}", { v: value, s: since }));
+  if (n >= limit) throw new TooManyRequestsError(message);
 }
 
 function findOne(app, collection, filter, params) {
@@ -147,9 +171,11 @@ module.exports = {
   parseTime: parseTime,
   cleanText: cleanText,
   requestId: requestId,
+  pseudonym: pseudonym,
+  writerKey: writerKey,
+  ipHash: ipHash,
   isOwner: isOwner,
   requireOwner: requireOwner,
-  displayName: displayName,
   env: env,
   localMode: localMode,
   seal: seal,

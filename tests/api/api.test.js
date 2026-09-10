@@ -1,8 +1,13 @@
 // tests/api/api.test.js — Cymbal end to end. Run through tests/api/run.sh, which starts
 // a throwaway local PocketBase and tests/api/mock.py. Tests run in order and share
-// state: friends are made in setup, the stage is cleared before providers connect.
+// state: people are made in setup, the stage is cleared before providers connect.
+//
+// Posting needs no account. A "person" here is a typed name, a browser key sent as
+// X-Cymbal-Key, and a client address sent as CF-Connecting-IP. Only the owner (and
+// one signed-in non-owner, to prove the role check) holds a PocketBase session.
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 
 const BASE = process.env.PB_URL;
 const MOCK = process.env.MOCK_URL;
@@ -13,6 +18,7 @@ const U = {};
 let SU = "";
 let seq = 0;
 const rid = () => "req-" + Date.now().toString(36) + "-" + (++seq);
+const newKey = () => crypto.randomBytes(24).toString("hex");
 const SP = {
   bohemian: "4u7EnebtmKWzUH433cf5Qv",
   rick: "4uLU6hMCjMI75M1A2tKUQC",
@@ -28,6 +34,8 @@ const P = {};
 async function call(method, path, opts = {}) {
   const headers = {};
   if (opts.token) headers.Authorization = opts.token;
+  if (opts.key) headers["X-Cymbal-Key"] = opts.key;
+  if (opts.ip) headers["CF-Connecting-IP"] = opts.ip;
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(BASE + path, {
     method, headers, redirect: "manual",
@@ -38,14 +46,22 @@ async function call(method, path, opts = {}) {
   try { json = JSON.parse(text); } catch (_) { /* not json */ }
   return { status: res.status, json, text, location: res.headers.get("location") };
 }
-const as = (who) => ({ get: (p) => call("GET", p, { token: U[who].token }), post: (p, b) => call("POST", p, { token: U[who].token, body: b || {} }), del: (p) => call("DELETE", p, { token: U[who].token }) });
+const as = (who) => {
+  const p = U[who];
+  const o = { token: p.token, key: p.key, ip: p.ip };
+  return {
+    get: (path) => call("GET", path, o),
+    post: (path, b) => call("POST", path, Object.assign({ body: b || {} }, o)),
+    del: (path) => call("DELETE", path, o),
+  };
+};
 const su = (method, path, body) => call(method, path, { token: SU, body });
 async function mock(path, body) {
   const res = await fetch(MOCK + path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
   return res.json();
 }
 async function share(who, url, caption, request) {
-  const r = await as(who).post("/api/cymbal/posts", { url, caption: caption || "", request_id: request || rid() });
+  const r = await as(who).post("/api/cymbal/posts", { url, name: U[who].name, caption: caption || "", request_id: request || rid() });
   assert.equal(r.status, 200, who + " posting " + url + ": " + r.text);
   return r.json.post;
 }
@@ -89,70 +105,72 @@ async function adds() {
 
 // ── setup ───────────────────────────────────────────────────────────────────
 
-test("setup: a superuser, an owner and five friends", async () => {
+async function account(name, role) {
+  const email = name + "@cymbal.invalid";
+  const pw = "pw-" + Math.random().toString(36).slice(2) + "-Xy9";
+  const c = await su("POST", "/api/collections/users/records", { email, password: pw, passwordConfirm: pw, name, role });
+  assert.equal(c.status, 200, c.text);
+  const t = await su("POST", "/api/collections/users/impersonate/" + c.json.id, {});
+  assert.equal(t.status, 200, t.text);
+  return { id: c.json.id, token: t.json.token };
+}
+
+test("setup: a superuser, the owner's session, one non-owner session, and six people", async () => {
   const r = await call("POST", "/api/collections/_superusers/auth-with-password", {
     body: { identity: process.env.SU_EMAIL, password: process.env.SU_PASS },
   });
   assert.equal(r.status, 200, r.text);
   SU = r.json.token;
-  for (const [name, role] of [["owner", "admin"], ["ann", "user"], ["ben", "user"], ["cat", "user"], ["dan", "user"], ["eve", "user"]]) {
-    const email = name + "@cymbal.invalid";
-    const pw = "pw-" + Math.random().toString(36).slice(2) + "-Xy9";
-    const c = await su("POST", "/api/collections/users/records", {
-      email, password: pw, passwordConfirm: pw, name: name[0].toUpperCase() + name.slice(1), role,
-    });
-    assert.equal(c.status, 200, c.text);
-    const t = await su("POST", "/api/collections/users/impersonate/" + c.json.id, {});
-    assert.equal(t.status, 200, t.text);
-    U[name] = { id: c.json.id, token: t.json.token, email };
-  }
+  const owner = await account("owner", "admin");
+  const member = await account("member", "user");
+  U.owner = { name: "Sol", key: newKey(), ip: "198.51.100.1", token: owner.token, id: owner.id };
+  U.member = { name: "Mem", key: newKey(), ip: "198.51.100.9", token: member.token, id: member.id };
+  ["ann", "ben", "cat", "dan", "eve"].forEach((n, i) => {
+    U[n] = { name: n[0].toUpperCase() + n.slice(1), key: newKey(), ip: "198.51.100." + (2 + i) };
+  });
+  U.nokey = { ip: "198.51.100.99" };
   await mock("/__reset", {});
 });
 
 // ── access ──────────────────────────────────────────────────────────────────
 
-test("signed-out callers reach nothing", async () => {
-  for (const [method, path] of [["GET", "/api/cymbal/feed"], ["POST", "/api/cymbal/posts"], ["GET", "/api/cymbal/playlists"],
-    ["GET", "/api/cymbal/posts/abcdefghijklmno/comments"], ["GET", "/api/cymbal/owner/status"],
-    ["POST", "/api/cymbal/owner/sync/run"], ["POST", "/api/cymbal/owner/apple/claim"]]) {
-    const r = await call(method, path, { body: method === "POST" ? {} : undefined });
-    assert.equal(r.status, 401, method + " " + path + " -> " + r.status);
-  }
+test("anyone can read; nobody but the owner reaches the owner routes", async () => {
+  assert.equal((await call("GET", "/api/cymbal/feed")).status, 200);
+  assert.equal((await call("GET", "/api/cymbal/playlists")).status, 200);
   const home = await call("GET", "/");
   assert.equal(home.status, 200);
   assert.match(home.text, /CYMBAL/);
   assert.equal((await call("GET", "/api/health")).status, 200);
+  const owner = [["GET", "/api/cymbal/owner/status"], ["POST", "/api/cymbal/owner/sync/run"], ["POST", "/api/cymbal/owner/apple/claim"],
+    ["GET", "/api/cymbal/owner/apple/config"], ["POST", "/api/cymbal/owner/oauth/spotify/start"], ["GET", "/api/cymbal/owner/syncs"]];
+  for (const [method, path] of owner) {
+    const anon = await call(method, path, { key: U.ann.key, body: method === "POST" ? {} : undefined });
+    assert.equal(anon.status, 401, "no session: " + path + " -> " + anon.status);
+    const member = await call(method, path, { token: U.member.token, body: method === "POST" ? {} : undefined });
+    assert.equal(member.status, 403, "non-owner session: " + path + " -> " + member.status);
+  }
 });
 
-test("the collection API is closed to friends and to anonymous callers", async () => {
+test("the collection API stays closed to everyone but the superuser", async () => {
   for (const c of ["posts", "comments", "playlist_syncs", "playlist_memberships", "provider_connections", "oauth_states"]) {
-    for (const token of [U.ann.token, U.owner.token, ""]) {
+    for (const token of [U.member.token, U.owner.token, ""]) {
       const list = await call("GET", "/api/collections/" + c + "/records", { token });
       assert.equal(list.status, 403, c + " list -> " + list.status);
       const create = await call("POST", "/api/collections/" + c + "/records", { token, body: { caption: "x" } });
       assert.equal(create.status, 403, c + " create -> " + create.status);
     }
   }
-  const users = await as("ann").get("/api/collections/users/records");
-  assert.equal(users.status, 200);
-  assert.deepEqual(users.json.items.map((u) => u.id), [U.ann.id], "a friend sees only their own user record");
 });
 
-test("friends cannot reach the owner's routes", async () => {
-  for (const [m, p] of [["get", "/api/cymbal/owner/status"], ["post", "/api/cymbal/owner/sync/run"], ["post", "/api/cymbal/owner/apple/claim"],
-    ["get", "/api/cymbal/owner/apple/config"], ["post", "/api/cymbal/owner/oauth/spotify/start"], ["get", "/api/cymbal/owner/syncs"]]) {
-    const r = await as("ann")[m](p);
-    assert.equal(r.status, 403, p + " -> " + r.status);
-  }
-});
-
-test("identity: nobody sets their own role, and sessions are not renewed locally", async () => {
-  const r = await call("PATCH", "/api/collections/users/records/" + U.ann.id, { token: U.ann.token, body: { role: "admin" } });
+test("identity: a signed-in person cannot make themselves owner, and sessions are not renewed locally", async () => {
+  const r = await call("PATCH", "/api/collections/users/records/" + U.member.id, { token: U.member.token, body: { role: "admin" } });
   assert.notEqual(r.status, 200);
-  const me = await su("GET", "/api/collections/users/records/" + U.ann.id);
+  const me = await su("GET", "/api/collections/users/records/" + U.member.id);
   assert.equal(me.json.role, "user");
-  const refresh = await call("POST", "/api/collections/users/auth-refresh", { token: U.ann.token, body: {} });
+  const refresh = await call("POST", "/api/collections/users/auth-refresh", { token: U.member.token, body: {} });
   assert.equal(refresh.status, 400);
+  const signup = await call("POST", "/api/collections/users/records", { body: { email: "x@cymbal.invalid", password: "abcdefgh1", passwordConfirm: "abcdefgh1" } });
+  assert.notEqual(signup.status, 200, "no self-service accounts");
 });
 
 // ── posting ─────────────────────────────────────────────────────────────────
@@ -172,7 +190,7 @@ test("unsupported and unsafe links are refused before any server fetch", async (
     "https://spotify.link/abc",
     "file:///etc/passwd",
   ]) {
-    const r = await as("ann").post("/api/cymbal/posts", { url: bad, request_id: rid() });
+    const r = await as("ann").post("/api/cymbal/posts", { url: bad, name: "Ann", request_id: rid() });
     assert.equal(r.status, 400, bad + " -> " + r.status);
     assert.ok(r.json.message && !/stack|goja|Error:/i.test(r.json.message), r.json.message);
   }
@@ -180,112 +198,148 @@ test("unsupported and unsafe links are refused before any server fetch", async (
   assert.equal(after, before, "a refused link must not cause any provider request");
 });
 
-test("a post is one post and three sync rows; replaying its request id returns it", async () => {
+test("posting needs a name and a browser key, and nothing else", async () => {
+  const url = spUrl(randomSpotifyId());
+  assert.equal((await call("POST", "/api/cymbal/posts", { ip: "198.51.100.50", body: { url, name: "Zed", request_id: rid() } })).status, 400, "no key");
+  assert.equal((await call("POST", "/api/cymbal/posts", { key: "short", body: { url, name: "Zed", request_id: rid() } })).status, 400, "malformed key");
+  assert.equal((await as("ann").post("/api/cymbal/posts", { url, request_id: rid() })).status, 400, "no name");
+  assert.equal((await as("ann").post("/api/cymbal/posts", { url, name: "A", request_id: rid() })).status, 400, "one-letter name");
+  assert.equal((await as("ann").post("/api/cymbal/posts", { url, name: "x".repeat(33), request_id: rid() })).status, 400, "long name");
+});
+
+test("a post is one post and three sync rows; replaying from the same browser returns it", async () => {
   const request = rid();
   const p = await share("ann", spUrl(SP.bohemian), "absolute tune", request);
   assert.equal(p.title, "Bohemian Rhapsody");
   assert.equal(p.artist, "Queen");
-  assert.equal(p.source, "spotify");
   assert.equal(p.poster, "Ann");
-  assert.deepEqual(Object.keys(p.sync).sort(), ["apple_music", "spotify", "youtube"]);
+  assert.equal(p.mine, true);
+  assert.equal(p.can_delete, true);
   const all = await rows(p.id);
   assert.equal(Object.keys(all).length, 3);
   assert.equal(all.spotify.target_id, SP.bohemian);
   assert.equal(all.spotify.match_basis, "source");
 
-  const again = await as("ann").post("/api/cymbal/posts", { url: spUrl(SP.bohemian), caption: "different", request_id: request });
-  assert.equal(again.status, 200);
+  const again = await as("ann").post("/api/cymbal/posts", { url: spUrl(SP.bohemian), name: "Ann", caption: "different", request_id: request });
   assert.equal(again.json.replayed, true);
   assert.equal(again.json.post.id, p.id);
   assert.equal(again.json.post.caption, "absolute tune");
 
+  const other = await as("ben").post("/api/cymbal/posts", { url: spUrl(SP.bohemian), name: "Ben", request_id: request });
+  assert.equal(other.status, 200);
+  assert.equal(other.json.replayed, false, "a request id belongs to the browser that sent it");
+  assert.notEqual(other.json.post.id, p.id);
+
   const dup = await share("ann", spUrl(SP.bohemian), "posting it twice on purpose");
   assert.notEqual(dup.id, p.id, "a second request is a second post");
   P.annFirst = p;
+  P.benBohemian = other.json.post;
 });
 
 test("captions are stored and returned as text, never as markup", async () => {
   const hostile = '<img src=x onerror=alert(1)><script>alert(2)</script> & "quotes"';
   const p = await share("ann", spUrl(randomSpotifyId()), hostile + String.fromCharCode(7));
   assert.equal(p.caption, hostile, "only control characters are removed");
-  const long = await as("ann").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()), caption: "x".repeat(501), request_id: rid() });
+  const long = await as("ann").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()), name: "Ann", caption: "x".repeat(501), request_id: rid() });
   assert.equal(long.status, 400);
-  const noId = await as("ann").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()) });
+  const noId = await as("ann").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()), name: "Ann" });
   assert.equal(noId.status, 400);
 });
 
-test("responses carry no author ids, emails or tokens", async () => {
+test("responses carry no keys, key hashes, addresses or tokens", async () => {
   const r = await as("ben").get("/api/cymbal/feed");
   assert.equal(r.status, 200);
-  for (const secret of [U.ann.id, U.owner.id, U.ben.id, "@cymbal.invalid", "author", "request_id", "sp-user", "evidence", "lease"]) {
+  const annHash = crypto.createHash("sha256").update(U.ann.key).digest("hex");
+  for (const secret of [U.ann.key, U.ben.key, annHash, U.ann.ip, "author_key", "ip_hash", "author", "request_id", "@cymbal.invalid", "sp-user", "evidence", "lease"]) {
     assert.ok(!r.text.includes(secret), "feed leaked " + secret);
   }
-  assert.ok(r.json.posts.every((p) => p.mine === false && p.can_delete === false));
+  const annPost = r.json.posts.find((p) => p.id === P.annFirst.id);
+  assert.equal(annPost.mine, false, "Ben is not Ann");
+  assert.equal(annPost.can_delete, false);
+  const anon = await call("GET", "/api/cymbal/feed");
+  assert.ok(anon.json.posts.every((p) => p.mine === false && p.can_delete === false));
 });
 
 test("pagination walks the feed once, newest first", async () => {
-  // ann has 3 posts; add 17 more across three people to reach 20.
-  for (let i = 0; i < 6; i++) await share("ben", spUrl(randomSpotifyId()), "ben " + i);
+  // ann has 3 posts and ben 1; add 16 more across three people to reach 20.
+  for (let i = 0; i < 5; i++) await share("ben", spUrl(randomSpotifyId()), "ben " + i);
   for (let i = 0; i < 6; i++) await share("cat", spUrl(randomSpotifyId()), "cat " + i);
   for (let i = 0; i < 5; i++) await share("owner", spUrl(randomSpotifyId()), "owner " + i);
-  const one = await as("ann").get("/api/cymbal/feed");
+  const one = await call("GET", "/api/cymbal/feed");
   assert.equal(one.json.posts.length, 15);
   assert.ok(one.json.next_cursor);
-  const two = await as("ann").get("/api/cymbal/feed?cursor=" + one.json.next_cursor);
+  const two = await call("GET", "/api/cymbal/feed?cursor=" + one.json.next_cursor);
   assert.equal(two.json.posts.length, 5);
   assert.equal(two.json.next_cursor, "");
   const all = one.json.posts.concat(two.json.posts);
   assert.equal(new Set(all.map((p) => p.id)).size, 20);
   for (let i = 1; i < all.length; i++) assert.ok(all[i - 1].created >= all[i].created, "newest first");
-  assert.equal((await as("ann").get("/api/cymbal/feed?cursor=nope")).status, 400);
+  assert.equal((await call("GET", "/api/cymbal/feed?cursor=nope")).status, 400);
 });
 
-test("rate limits: ten posts an hour, and deleting one does not buy another", async () => {
+test("rate limits per browser: ten posts an hour, and deleting one does not buy another", async () => {
   const mine = [];
   for (let i = 0; i < 10; i++) mine.push(await share("dan", spUrl(randomSpotifyId())));
-  const eleventh = await as("dan").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()), request_id: rid() });
+  const eleventh = await as("dan").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()), name: "Dan", request_id: rid() });
   assert.equal(eleventh.status, 429);
   assert.equal((await as("dan").del("/api/cymbal/posts/" + mine[0].id)).status, 200);
-  const twelfth = await as("dan").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()), request_id: rid() });
+  const twelfth = await as("dan").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()), name: "Dan", request_id: rid() });
   assert.equal(twelfth.status, 429);
 });
 
-test("comments: attributed, replay-safe, counted and rate limited", async () => {
+test("rate limits per network: a fresh browser key does not escape the address limit", async () => {
+  const ip = "203.0.113.9";
+  for (let k = 0; k < 3; k++) {
+    const key = newKey();
+    for (let i = 0; i < 10; i++) {
+      const r = await call("POST", "/api/cymbal/posts", { key, ip, body: { url: spUrl(randomSpotifyId()), name: "Spam" + k, request_id: rid() } });
+      assert.equal(r.status, 200, "key " + k + " post " + i + ": " + r.text);
+    }
+  }
+  const blocked = await call("POST", "/api/cymbal/posts", { key: newKey(), ip, body: { url: spUrl(randomSpotifyId()), name: "Spam4", request_id: rid() } });
+  assert.equal(blocked.status, 429);
+  const elsewhere = await call("POST", "/api/cymbal/posts", { key: newKey(), ip: "203.0.113.10", body: { url: spUrl(randomSpotifyId()), name: "Fine", request_id: rid() } });
+  assert.equal(elsewhere.status, 200, "another network is unaffected");
+});
+
+test("comments: named, replay-safe, counted and rate limited per browser", async () => {
   const postId = P.annFirst.id;
   const request = rid();
-  const c = await as("ben").post("/api/cymbal/posts/" + postId + "/comments", { body: "tune", request_id: request });
+  const c = await as("ben").post("/api/cymbal/posts/" + postId + "/comments", { body: "tune", name: "Ben", request_id: request });
   assert.equal(c.status, 200, c.text);
   assert.equal(c.json.comment.poster, "Ben");
+  assert.equal(c.json.comment.mine, true);
   P.benComment = c.json.comment.id;
-  const again = await as("ben").post("/api/cymbal/posts/" + postId + "/comments", { body: "tune", request_id: request });
+  const again = await as("ben").post("/api/cymbal/posts/" + postId + "/comments", { body: "tune", name: "Ben", request_id: request });
   assert.equal(again.json.replayed, true);
   assert.equal(again.json.comment.id, c.json.comment.id);
   const list = await as("ann").get("/api/cymbal/posts/" + postId + "/comments");
   assert.equal(list.json.comments.length, 1);
   assert.equal(list.json.comments[0].mine, false);
-  assert.ok(!list.text.includes(U.ben.id));
-  assert.equal((await as("ann").post("/api/cymbal/posts/" + postId + "/comments", { body: "", request_id: rid() })).status, 400);
-  assert.equal((await as("ann").post("/api/cymbal/posts/" + postId + "/comments", { body: "y".repeat(1001), request_id: rid() })).status, 400);
+  assert.ok(!list.text.includes(U.ben.key));
+  assert.equal((await as("ann").post("/api/cymbal/posts/" + postId + "/comments", { body: "", name: "Ann", request_id: rid() })).status, 400);
+  assert.equal((await as("ann").post("/api/cymbal/posts/" + postId + "/comments", { body: "hi", request_id: rid() })).status, 400, "a name is required");
+  assert.equal((await as("ann").post("/api/cymbal/posts/" + postId + "/comments", { body: "y".repeat(1001), name: "Ann", request_id: rid() })).status, 400);
   for (let i = 0; i < 60; i++) {
-    const r = await as("cat").post("/api/cymbal/posts/" + postId + "/comments", { body: "c" + i, request_id: rid() });
+    const r = await as("cat").post("/api/cymbal/posts/" + postId + "/comments", { body: "c" + i, name: "Cat", request_id: rid() });
     assert.equal(r.status, 200, "comment " + i + ": " + r.text);
   }
-  const over = await as("cat").post("/api/cymbal/posts/" + postId + "/comments", { body: "one too many", request_id: rid() });
+  const over = await as("cat").post("/api/cymbal/posts/" + postId + "/comments", { body: "one too many", name: "Cat", request_id: rid() });
   assert.equal(over.status, 429);
   const rec = await su("GET", "/api/collections/posts/records/" + postId);
   assert.equal(rec.json.comment_count, 61, "ben's one and cat's sixty");
 });
 
-test("only the author or the owner removes a post or comment", async () => {
+test("only the writing browser or the owner removes a post or comment", async () => {
   const postId = P.annFirst.id;
   assert.equal((await as("ben").del("/api/cymbal/posts/" + postId)).status, 403);
+  assert.equal((await call("DELETE", "/api/cymbal/posts/" + postId)).status, 403, "no key, no session");
+  assert.equal((await call("DELETE", "/api/cymbal/posts/" + postId, { token: U.member.token })).status, 403, "a non-owner session");
   assert.equal((await as("ann").del("/api/cymbal/comments/" + P.benComment)).status, 403);
-  assert.equal((await as("owner").del("/api/cymbal/comments/" + P.benComment)).status, 200);
-  const benPosts = await su("GET", "/api/collections/posts/records?perPage=1&filter=" +
-    encodeURIComponent('author="' + U.ben.id + '" && deleted=false'));
-  const benPost = benPosts.json.items[0];
-  assert.ok(benPost, "ben has a live post to moderate");
-  assert.equal((await as("owner").del("/api/cymbal/posts/" + benPost.id)).status, 200, "the owner moderates");
+  assert.equal((await as("owner").del("/api/cymbal/comments/" + P.benComment)).status, 200, "the owner moderates comments");
+  assert.equal((await as("owner").del("/api/cymbal/posts/" + P.benBohemian.id)).status, 200, "the owner moderates posts");
+  const ownerView = (await as("owner").get("/api/cymbal/feed")).json.posts;
+  assert.ok(ownerView.every((p) => p.can_delete === true), "the owner can remove anything");
   assert.equal((await as("ann").del("/api/cymbal/posts/" + postId)).status, 200);
   const feed = await as("ben").get("/api/cymbal/feed");
   assert.ok(!feed.json.posts.some((p) => p.id === postId));
@@ -293,6 +347,7 @@ test("only the author or the owner removes a post or comment", async () => {
   const rec = await su("GET", "/api/collections/posts/records/" + postId);
   assert.equal(rec.json.caption, "");
   assert.equal(rec.json.deleted, true);
+  assert.equal(rec.json.deleted_by, "author");
   const all = await rows(postId);
   assert.ok(Object.values(all).every((r) => r.status === "cancelled" || r.status === "synced"));
 });
@@ -346,7 +401,7 @@ test("the owner connects Spotify and YouTube; OAuth state is single-use", async 
   assert.ok(!s.text.includes("sp-user") && !s.text.includes("_enc"), "the owner panel never returns tokens");
 });
 
-test("each playlist is created once, and friends get the three links", async () => {
+test("each playlist is created once, and everyone gets the three links", async () => {
   for (const p of ["spotify", "youtube"]) {
     const a = await as("owner").post("/api/cymbal/owner/providers/" + p + "/playlist");
     assert.equal(a.status, 200, a.text);
@@ -358,7 +413,7 @@ test("each playlist is created once, and friends get the three links", async () 
   assert.equal((await as("owner").post("/api/cymbal/owner/apple/share-url", { url: "https://evil.example/playlist/pl.u-x" })).status, 400);
   assert.equal((await as("owner").post("/api/cymbal/owner/apple/share-url",
     { url: "https://music.apple.com/gb/playlist/cymbal-on-website/pl.u-TestShare01" })).status, 200);
-  const links = await as("ben").get("/api/cymbal/playlists");
+  const links = await call("GET", "/api/cymbal/playlists");
   assert.ok(links.json.playlists.every((p) => p.ready && p.url.startsWith("https://")), links.text);
 });
 
@@ -378,7 +433,7 @@ test("a Spotify post reaches all three: exact, ISRC, and a Topic upload", async 
   const a = await adds();
   assert.equal(a.spotify[SP.bohemian], 1);
   assert.equal(a.youtube.fJ9rUzIMcZQ, 1);
-  const card = (await as("ben").get("/api/cymbal/feed")).json.posts.find((x) => x.id === p.id);
+  const card = (await call("GET", "/api/cymbal/feed")).json.posts.find((x) => x.id === p.id);
   assert.equal(card.sync.spotify.state, "synced");
   assert.equal(card.sync.apple_music.state, "pending");
 });
@@ -418,11 +473,11 @@ test("ambiguous matches are never guessed, and the owner repairs them with an ex
   assert.equal(all.youtube.reason, "no_match");
   const attn = await as("owner").get("/api/cymbal/owner/syncs?status=attention");
   assert.ok(attn.json.syncs.some((s) => s.id === all.apple_music.id && s.post && s.post.title === "Echo Chamber"));
-  const friend = (await as("ben").get("/api/cymbal/feed")).json.posts.find((x) => x.id === p.id);
+  const friend = (await call("GET", "/api/cymbal/feed")).json.posts.find((x) => x.id === p.id);
   assert.equal(friend.sync.apple_music.state, "attention");
   const wrong = await as("owner").post("/api/cymbal/owner/syncs/" + all.apple_music.id + "/override", { url: "https://youtu.be/dQw4w9WgXcQ" });
   assert.equal(wrong.status, 400);
-  assert.equal((await as("ben").post("/api/cymbal/owner/syncs/" + all.apple_music.id + "/override", { url: "https://music.apple.com/gb/song/x/1000000001" })).status, 403);
+  assert.equal((await call("POST", "/api/cymbal/owner/syncs/" + all.apple_music.id + "/override", { token: U.member.token, body: { url: "https://music.apple.com/gb/song/x/1000000001" } })).status, 403);
   const fix = await as("owner").post("/api/cymbal/owner/syncs/" + all.apple_music.id + "/override", { url: "https://music.apple.com/gb/song/echo-chamber/1000000001" });
   assert.equal(fix.status, 200, fix.text);
   const after = await rows(p.id);
@@ -562,8 +617,8 @@ test("deleting a post mid-flight: cancelled if not added, synced if it really wa
   assert.equal((await rows(b.id)).apple_music.status, "cancelled");
 });
 
-test("friends see states, never match evidence or provider detail", async () => {
-  const r = await as("ben").get("/api/cymbal/feed");
+test("readers see states, never match evidence or provider detail", async () => {
+  const r = await call("GET", "/api/cymbal/feed");
   for (const k of ["evidence", "detail", "lease", "reason", "target_id", "attempts", "steps"]) assert.ok(!r.text.includes('"' + k + '"'), "leaked " + k);
 });
 

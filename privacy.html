@@ -21,37 +21,23 @@
   <main class="wrap">
     <article class="panel doc">
       <h2>PRIVACY</h2>
-      <p>Cymbal is a small, invite-only app run by the owner of solhann.net for a group of friends. This page says what it keeps, who can see it, and what leaves it.</p>
+      <p>Cymbal has no accounts. Anyone with the link can read it and post under whatever name they type.</p>
 
-      <h2>WHO CAN SEE WHAT</h2>
+      <h2>WHAT IS STORED</h2>
       <ul>
-        <li>Only people the owner has given access to can sign in. Everyone signed in sees every post and comment, with the poster's display name.</li>
-        <li>Nobody else can read posts or comments. The page itself is public, but it shows nothing until you sign in.</li>
-        <li>The three playlists are not private: the Spotify one is public, the YouTube one is unlisted (anyone with the link), and the Apple Music one is shared publicly. They contain songs only, never who posted them or what anyone said.</li>
-      </ul>
-
-      <h2>WHAT CYMBAL STORES</h2>
-      <ul>
-        <li>Your display name and an internal account id from your solhann.net sign-in. Cymbal never shows your email address to anyone.</li>
-        <li>Each post: the link you shared, your optional caption, the track's title, artist, length and ISRC as looked up from the music service, and when you posted.</li>
-        <li>Each comment and when you wrote it.</li>
-        <li>For the owner's accounts only: the authorisation that lets Cymbal add songs to the owner's Spotify and YouTube playlists, stored encrypted. Friends never connect a music account.</li>
-        <li>Records of what has been added to each playlist, so a song is only ever added once.</li>
+        <li>Each post: the link, the name and caption you typed, the track's title, artist, length and ISRC, and when it was posted.</li>
+        <li>Each comment: the name and text you typed, and when.</li>
+        <li>A random key your browser makes the first time you visit. Cymbal keeps a scrambled copy (a hash) so it can tell that a post came from your browser and let you remove it. Clearing your browser data loses it.</li>
+        <li>A scrambled copy of your network address, used only for rate limits. The address itself isn't kept.</li>
+        <li>For the owner only: the authorisation that lets Cymbal add songs to the owner's Spotify and YouTube playlists, stored encrypted.</li>
       </ul>
 
       <h2>WHAT LEAVES CYMBAL</h2>
-      <p>To find a song on the other services, Cymbal sends track identifiers, titles, artist names and ISRCs to Spotify, Apple Music (including Apple's public iTunes lookup), YouTube and MusicBrainz. It sends nothing about you: not your name, not your caption, not your comments.</p>
-      <p>Apple Music additions happen in the owner's own browser. Apple's authorisation for that stays in that browser and is never sent to Cymbal's server.</p>
+      <p>To find a song on the other services, Cymbal sends track identifiers, titles, artist names and ISRCs to Spotify, Apple Music, YouTube and MusicBrainz. Never your name, caption or comments.</p>
+      <p>The three playlists are public and contain songs only.</p>
 
-      <h2>DELETING THINGS</h2>
-      <ul>
-        <li>You can remove your own posts and comments; the owner can remove any. Removing blanks the text and hides it straight away.</li>
-        <li>A song that has already reached a playlist stays on that playlist. Playlists only ever grow in this version.</li>
-        <li>Anything not yet added when you remove a post is cancelled.</li>
-      </ul>
-
-      <h2>KEEPING IT</h2>
-      <p>Data lives on the solhann.net server and in its nightly backups, kept for a week. Ask the owner if you want your account's posts and comments removed entirely.</p>
+      <h2>REMOVING THINGS</h2>
+      <p>You can remove your own posts and comments from the browser you wrote them in; the owner can remove anything. Removing blanks the text straight away. A song already on a playlist stays there. Data is kept on the solhann.net server and its week of nightly backups.</p>
       <p><a href="./">Back to Cymbal</a> <a href="terms.html">Terms</a></p>
     </article>
   </main>

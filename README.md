@@ -15,11 +15,16 @@ the owner's Spotify, YouTube and Apple Music accounts.
 
 ## Who can use it
 
-The page and this repository are public; the posts are not. Cymbal is a governed
-app: sign-in goes through `id.solhann.net`, and only people granted access to
-`cymbal-on-website` on `id-admin.solhann.net` can sign in at all. Grant friends
-`user` and the owner `admin`. The owner sees the owner panel; friends never connect a
-music account.
+Anyone with the link. There are no accounts: people post and comment under a name
+they type, remembered in their browser. Each browser makes a random private key and
+sends it as `X-Cymbal-Key`; only its hash is stored, and it is what lets that browser
+remove its own posts. Rate limits are per key (10 posts, 60 comments an hour) and
+per network (30 and 180), using a salted hash of the client address.
+
+Only the owner signs in, from the footer's "Owner" link, through `id.solhann.net`.
+That needs an `admin` grant on `cymbal-on-website` at `id-admin.solhann.net`. The
+owner panel connects the music services, repairs matches and can remove any post or
+comment. Friends need no grant and never connect a music account.
 
 ## How a post reaches three playlists
 
