@@ -3,7 +3,6 @@ solhann_app: true
 slug: cymbal-on-website
 title: Cymbal on Website
 description: Friends share music, talk about it, and keep three playlists in sync.
-emoji: 🥁
 ---
 
 # Cymbal on Website
@@ -96,6 +95,8 @@ Exact callback URLs, also shown in the owner panel:
 
 ## Operations
 
-- Backups: `platform/bin/pb-backups cymbal-on-website --local` (offsite needs the
-  platform S3 credentials in `pb-secret`).
+- Backups: nightly to the instance's own disk, enabled on prod as root with
+  `tools/enable-local-backups.sh` (prod has no `jq`, which `platform/bin/pb-backups`
+  needs). Offsite backups need the platform S3 credentials in `pb-secret` and remain
+  unverified until those exist.
 - Health: `https://cymbal-on-website.solhann.net/api/health`.
