@@ -99,7 +99,8 @@
 
   // ── sign-in state ─────────────────────────────────────────────────────────
 
-  let currentUser = "";
+  // null, not "": the first onChange call must always render, and signed-out is "".
+  let currentUser = null;
   let wasSignedIn = false;
 
 
