@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; object-src 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Playlists — Cymbal on Website</title>
+  <meta name="theme-color" content="#FFB84D">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='44' rx='44' ry='12' fill='%23D56062'/%3E%3Crect x='47' y='44' width='6' height='50' fill='%232b2b29'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="app.css">
+  <script src="theme.js"></script>
+  <script src="playlists.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <h1 class="brand"><a href="./"><span class="brand-mark" aria-hidden="true"></span>CYMBAL <span class="brand-sub">ON WEBSITE</span></a></h1>
+      <div class="top-actions"><button id="theme" class="btn btn-small" type="button">DARK</button></div>
+    </div>
+  </header>
+  <main class="wrap">
+    <article class="panel doc">
+      <h2>PLAYLISTS</h2>
+      <ul id="playlist-links" class="plain-links" aria-live="polite">
+        <li>Loading…</li>
+      </ul>
+    </article>
+  </main>
+  <footer class="foot wrap">
+    <a href="./">Back to Cymbal</a>
+  </footer>
+</body>
+</html>

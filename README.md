@@ -47,7 +47,7 @@ comment. Friends need no grant and never connect a music account.
 ## Layout
 
     index.html app.js app.css theme.js   the page (no build step)
-    privacy.html terms.html              what is stored and how the playlists behave
+    playlists.html playlists.js          the three playlist links, from the footer
     pb-auth.js pb_hooks/identity.pb.js pb_migrations/1756540000_identity.js
                                          the platform identity layer: do not edit
     pb_migrations/1757520000_cymbal_schema.js   Cymbal's collections, all rules null

@@ -130,19 +130,6 @@
   let pollTimer = null;
   let appleTimer = null;
 
-  // ── playlists ─────────────────────────────────────────────────────────────
-
-  async function loadPlaylists() {
-    let data;
-    try { data = await api("/api/cymbal/playlists"); } catch (_) { return; }
-    const list = $("playlists");
-    list.replaceChildren(...data.playlists.map((p) => h("li", null,
-      p.url && safeHref(p.url)
-        ? h("a", { class: "btn", href: p.url, target: "_blank", rel: "noopener noreferrer" }, p.label.toUpperCase())
-        : h("span", { class: "btn is-waiting", title: "This playlist isn't set up yet" }, p.label.toUpperCase(), h("span", { class: "visually-hidden" }, " (not set up yet)"))
-    )));
-  }
-
   // ── composer ──────────────────────────────────────────────────────────────
 
   // One request id per attempt at a post, kept until it succeeds, so a retry after a
@@ -257,7 +244,8 @@
           class: "btn btn-small js-toggle", type: "button", "aria-expanded": "false", "aria-controls": "c-" + p.id,
           onclick: () => toggleComments(card, p.id),
         }, count ? "COMMENTS (" + count + ")" : "COMMENT"),
-        p.can_delete ? h("button", { class: "btn btn-small btn-quiet", type: "button", onclick: () => removePost(p.id) }, "REMOVE") : null),
+        p.can_delete ? h("button", { class: "btn-remove", type: "button", onclick: () => removePost(p.id) },
+          h("span", { "aria-hidden": "true" }, "✕"), "Remove") : null),
       h("div", { class: "comments", id: "c-" + p.id, hidden: true }));
     return card;
   }
@@ -504,7 +492,6 @@
       await api("/api/cymbal/owner/providers/" + provider + "/playlist", { method: "POST" });
       ownerSay(LABELS[provider] + " playlist ready.", "ok");
       loadOwner();
-      loadPlaylists();
     } catch (err) { ownerSay(err.message, "error"); }
   }
 
@@ -651,7 +638,6 @@
           try {
             await api("/api/cymbal/owner/apple/share-url", { method: "POST", body: { url: input.value.trim() } });
             ownerSay("Share link saved.", "ok");
-            loadPlaylists();
           } catch (err) { ownerSay(err.message, "error"); }
         });
         extra.push(h("p", { class: "small" }, "Apple shows the public link once the playlist has synced. Cymbal tries to find it itself; paste it here if it doesn't."), form);
@@ -690,7 +676,6 @@
         const url = "https://music.apple.com/" + appleCfg.storefront + "/playlist/cymbal-on-website/" + pp.globalId;
         await api("/api/cymbal/owner/apple/share-url", { method: "POST", body: { url: url } });
         appleCfg.playlist_url = url;
-        loadPlaylists();
       }
     } catch (_) { /* Apple hasn't published it yet; the paste box stays */ }
   }
@@ -765,7 +750,6 @@
   // ── boot ──────────────────────────────────────────────────────────────────
   // Last, on purpose: everything below touches state declared throughout this file.
 
-  loadPlaylists();
   loadFeed(true);
   pollTimer = setInterval(() => { if (!document.hidden) refreshTop(); }, 45000);
 

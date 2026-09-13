@@ -9,7 +9,7 @@ const root = path.join(__dirname, "..", "..");
 const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
 
 test("the page never turns data into markup", () => {
-  for (const f of ["app.js", "theme.js"]) {
+  for (const f of ["app.js", "theme.js", "playlists.js"]) {
     const src = read(f);
     for (const bad of ["innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function"]) {
       assert.ok(!src.includes(bad), f + " uses " + bad);
@@ -18,7 +18,7 @@ test("the page never turns data into markup", () => {
 });
 
 test("every page has a CSP and no inline script", () => {
-  for (const f of ["index.html", "privacy.html", "terms.html"]) {
+  for (const f of ["index.html", "playlists.html"]) {
     const html = read(f);
     assert.match(html, /http-equiv="Content-Security-Policy"/, f);
     assert.doesNotMatch(html, /script-src[^"]*unsafe-inline/, f);

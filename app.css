@@ -120,6 +120,8 @@ a { color: inherit; text-underline-offset: 3px; }
   gap: 10px;
   text-shadow: 2px 2px 0 rgba(0, 0, 0, .15);
 }
+/* On pages where the name links home, the link lays out like the plain header. */
+.brand a { display: flex; align-items: center; gap: 10px; text-decoration: none; }
 .brand-sub { color: var(--accent-strong); }
 [data-theme="dark"] .brand-sub { color: var(--accent); }
 .brand-mark {
@@ -194,32 +196,18 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .status.is-ok { color: var(--ok); font-weight: 700; }
 .hint, .count { font-size: 12px; color: var(--muted); }
 
-/* ── gate ───────────────────────────────────────────────────────────────── */
-
-.gate { margin-top: 20px; display: grid; gap: 14px; justify-items: start; }
-
-/* ── playlists ──────────────────────────────────────────────────────────── */
-
-.playlists { margin: 16px 0 14px; }
-.playlist-list {
-  list-style: none;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.playlist-list .btn { width: 100%; font-size: 9px; padding: 8px 6px; text-align: center; }
-.playlist-list .is-waiting { opacity: .7; box-shadow: none; border-style: dashed; cursor: default; }
-
 /* ── composer ───────────────────────────────────────────────────────────── */
 
-.composer { display: grid; gap: 4px; }
+.composer { display: grid; gap: 4px; margin-top: 16px; }
 .composer label + input, .composer label + textarea { margin-bottom: 10px; }
 .composer label + textarea { margin-bottom: 2px; }
 .composer .count { text-align: right; margin-bottom: 8px; }
-.composer-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.composer-foot { display: flex; align-items: flex-end; gap: 10px; }
 .name-field { flex: 1 1 auto; min-width: 0; }
-.composer .name-field input { margin-bottom: 0; }
+/* The name box and POST share one height, so they sit on one line. */
+.composer-foot input, .composer-foot .btn { height: 50px; min-height: 50px; margin-bottom: 0; }
+.composer .composer-foot input { margin-bottom: 0; line-height: 1.2; padding-top: 0; padding-bottom: 0; }
+.composer-foot .btn { flex: none; padding: 0 18px; }
 .comment-form .row input { flex: 1 1 140px; min-width: 0; }
 .foot .foot-btn { color: inherit; font-size: 13px; text-decoration: underline; }
 
@@ -264,7 +252,25 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .sync-pending { color: var(--muted); }
 .sync-mark { font-family: var(--label); font-size: 8px; }
 
-.card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* Removing is the quiet action on a card: no box until you point at it. */
+.btn-remove {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  font: 700 12px var(--read);
+  color: var(--warn);
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.btn-remove:hover { border-color: currentColor; }
+.btn-remove:active { transform: translate(1px, 1px); }
+.btn-remove span { font-size: 11px; }
 
 .comments { border-top: 2px dashed var(--line); padding-top: 10px; display: grid; gap: 10px; }
 .comment-list { list-style: none; padding: 0; display: grid; gap: 10px; }
@@ -321,6 +327,9 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .doc h2 { font-family: var(--label); font-size: 11px; line-height: 1.5; margin-top: 8px; }
 .doc p, .doc li { font-size: 14px; }
 .doc ul { padding-left: 20px; display: grid; gap: 6px; }
+.doc .plain-links { list-style: none; padding: 0; gap: 14px; }
+.plain-links a { font-size: 17px; font-weight: 700; }
+.plain-links .waiting { color: var(--muted); }
 
 /* Narrow phones: the name, the theme toggle and sign-out share one row. */
 @media (max-width: 420px) {
@@ -336,7 +345,6 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   .panel { padding: 20px; }
   .btn { font-size: 11px; }
   .btn-small { font-size: 9px; }
-  .playlist-list .btn { font-size: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
