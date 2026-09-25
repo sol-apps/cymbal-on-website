@@ -136,8 +136,43 @@
   // dropped connection returns the original post instead of creating a second one.
   let postRid = null;
 
+  // The composer starts as one field; the rest opens once there is a link to share.
+  // A remembered name shows as "Posting as …" instead of an empty box.
+  function openComposer() { $("composer-more").hidden = false; }
+
+  function showName(editing) {
+    const name = savedName();
+    const known = !!name && !editing;
+    $("name").hidden = known;
+    $("name").previousElementSibling.hidden = known;
+    $("name-known").hidden = !known;
+    $("name-shown").textContent = name;
+  }
+
+  function linkKind(url) {
+    const m = /^https:\/\/([a-z0-9.-]+)\//i.exec(url);
+    if (!m) return "";
+    const host = m[1].toLowerCase();
+    if (host === "open.spotify.com" || host === "spotify.link") return "Spotify";
+    if (host === "music.apple.com" || host === "itunes.apple.com") return "Apple Music";
+    if (/(^|\.)youtube\.com$/.test(host) || host === "youtu.be") return "YouTube";
+    return "?";
+  }
+
   $("name").value = savedName();
-  $("url").addEventListener("input", () => { postRid = null; });
+  showName(false);
+  $("name-change").addEventListener("click", () => { showName(true); $("name").focus(); $("name").select(); });
+  $("url").addEventListener("input", () => {
+    postRid = null;
+    const url = $("url").value.trim();
+    const kind = url ? linkKind(url) : "";
+    const tag = $("url-kind");
+    tag.textContent = kind === "?" ? "Not a supported link" : kind;
+    tag.className = "url-kind" + (kind === "?" ? " is-bad" : kind ? " is-good" : "");
+    if (url) openComposer();
+    say("composer-status", "");
+  });
+  $("url").addEventListener("paste", () => setTimeout(() => { if ($("url").value.trim()) $("caption").focus(); }, 0));
   $("caption").addEventListener("input", () => {
     $("caption-count").textContent = $("caption").value.length + "/500";
   });
@@ -153,6 +188,8 @@
     }
     if (name.length < 2) {
       say("composer-status", "Add your name.", "error");
+      openComposer();
+      showName(true);
       $("name").focus();
       return;
     }
@@ -170,6 +207,9 @@
       $("url").value = "";
       $("caption").value = "";
       $("caption-count").textContent = "0/500";
+      $("url-kind").textContent = "";
+      $("composer-more").hidden = true;
+      showName(false);
       upsertCard(res.post, true);
       say("composer-status", res.replayed ? "Already posted." : "Posted. It'll be added to the playlists shortly.", "ok");
     } catch (err) {
@@ -190,22 +230,32 @@
     loading = true;
     if (reset) {
       cursor = "";
-      $("posts").replaceChildren();
+      $("posts").replaceChildren(skeleton(), skeleton());
+      $("posts").classList.add("is-loading");
     }
-    say("feed-status", "Loading…");
+    say("feed-status", reset ? "" : "Loading…");
     try {
       const q = cursor ? "?cursor=" + encodeURIComponent(cursor) : "";
       const data = await api("/api/cymbal/feed" + q);
+      if (reset) $("posts").replaceChildren();
       data.posts.forEach((p) => upsertCard(p, false));
       cursor = data.next_cursor || "";
       $("more").hidden = !cursor;
       const empty = !$("posts").children.length;
-      say("feed-status", empty ? "Nothing here yet. Post the first song." : "");
+      say("feed-status", "");
+      if (empty) $("posts").replaceChildren(h("li", { class: "empty panel" },
+        h("span", { class: "brand-mark big", "aria-hidden": "true" }), h("p", null, "Nothing here yet. Post the first song.")));
     } catch (err) {
+      if (reset) $("posts").replaceChildren();
       say("feed-status", err.message, "error");
     } finally {
       loading = false;
     }
+  }
+
+  function skeleton() {
+    return h("li", { class: "card panel skel", "aria-hidden": "true" },
+      h("span", { class: "skel-line short" }), h("span", { class: "skel-line" }), h("span", { class: "skel-line mid" }));
   }
 
   $("more").addEventListener("click", () => loadFeed(false));
@@ -218,28 +268,96 @@
     } catch (_) { /* next tick */ }
   }
 
+  // All three waiting is the normal state for a new post: say it once, not three times.
   function syncChips(p) {
-    return h("ul", { class: "syncs", "aria-label": "Playlist status" }, ORDER.map((prov) => {
-      const s = (p.sync && p.sync[prov]) || { state: "pending" };
+    const states = ORDER.map((prov) => (p.sync && p.sync[prov]) || { state: "pending" });
+    if (states.every((s) => (STATE_TEXT[s.state] || "pending") === "pending")) {
+      return h("p", { class: "syncs-wait" }, h("span", { class: "sync-mark", "aria-hidden": "true" }, "…"), "Adding to the playlists");
+    }
+    return h("ul", { class: "syncs", "aria-label": "Playlist status" }, ORDER.map((prov, i) => {
+      const s = states[i];
       const state = STATE_TEXT[s.state] || "pending";
-      const inner = [h("span", { class: "sync-mark", "aria-hidden": "true" }, STATE_MARK[state]), LABELS[prov] + " " + state];
-      return h("li", { class: "sync sync-" + state },
+      const inner = [h("span", { class: "sync-mark", "aria-hidden": "true" }, STATE_MARK[state]),
+        LABELS[prov], h("span", { class: "visually-hidden" }, " " + state)];
+      return h("li", { class: "sync sync-" + state, title: LABELS[prov] + ": " + state },
         s.url && safeHref(s.url) ? h("a", { href: s.url, target: "_blank", rel: "noopener noreferrer" }, inner) : inner);
     }));
   }
 
+  // A stable colour per name, so people are recognisable down the feed.
+  function avatar(name) {
+    let n = 0;
+    for (const ch of String(name)) n = (n * 31 + ch.codePointAt(0)) >>> 0;
+    const first = Array.from(String(name).trim())[0] || "?";
+    return h("span", { class: "avatar av-" + (n % 6), "aria-hidden": "true" }, first.toUpperCase());
+  }
+
+  // The embed for a post's own link, built only from the id in a canonical URL the
+  // server produced. Loaded on request, so nobody's browser talks to Spotify, Google
+  // or Apple just by opening the feed.
+  function embedFor(url) {
+    let m;
+    if ((m = /^https:\/\/open\.spotify\.com\/track\/([A-Za-z0-9]{22})$/.exec(url))) {
+      return { src: "https://open.spotify.com/embed/track/" + m[1], cls: "player-spotify" };
+    }
+    if ((m = /^https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{11})$/.exec(url))) {
+      return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1", cls: "player-youtube" };
+    }
+    if ((m = /^https:\/\/music\.apple\.com\/([a-z]{2})\/song\/([0-9]{1,15})$/.exec(url))) {
+      return { src: "https://embed.music.apple.com/" + m[1] + "/song/" + m[2], cls: "player-apple" };
+    }
+    return null;
+  }
+
+  function togglePlayer(card, p) {
+    const box = card.querySelector(".player");
+    const btn = card.querySelector(".js-play");
+    if (!box.hidden) {
+      box.hidden = true;
+      box.replaceChildren();
+      btn.setAttribute("aria-expanded", "false");
+      btn.firstChild.textContent = "▶";
+      btn.lastChild.textContent = "PLAY";
+      return;
+    }
+    const e = embedFor(p.url);
+    if (!e) return;
+    box.className = "player " + e.cls;
+    box.replaceChildren(h("iframe", {
+      src: e.src, title: "Player: " + (p.title || p.source_label + " track"), loading: "lazy",
+      allow: "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture",
+      referrerpolicy: "strict-origin-when-cross-origin",
+    }));
+    box.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    btn.firstChild.textContent = "■";
+    btn.lastChild.textContent = "HIDE";
+  }
+
   function buildCard(p) {
-    const title = p.title || (p.resolving ? "Finding the track details…" : (p.unavailable ? "Couldn't look this one up" : "Untitled"));
+    // A lookup that never finished (the provider isn't connected yet, say) shouldn't
+    // read as "finding…" for days; after a while it is just "a Spotify track".
+    const stale = Date.now() - Date.parse(String(p.created || "").replace(" ", "T")) > 15 * 60 * 1000;
+    const fallback = (p.source_label || "Unknown") + " track";
+    const title = p.title || (p.unavailable ? "Couldn't look this one up" : (p.resolving && !stale ? "Finding the track details…" : fallback));
     const count = p.comment_count || 0;
+    const playable = !!embedFor(p.url);
     const card = h("li", { class: "card panel", "data-id": p.id },
       h("div", { class: "card-head" },
-        h("span", { class: "src" }, (p.source_label || "").toUpperCase()),
-        h("span", null, p.poster + ", " + when(p.created))),
-      h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title)),
-      p.artist ? h("p", { class: "artist" }, p.artist) : null,
+        avatar(p.poster),
+        h("span", { class: "who" }, h("strong", null, p.poster), h("span", { class: "when" }, when(p.created))),
+        h("span", { class: "src src-" + (p.source || "x") }, (p.source_label || "").toUpperCase())),
       p.caption ? h("p", { class: "caption" }, p.caption) : null,
+      h("div", { class: "song" },
+        h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title)),
+        p.artist ? h("p", { class: "artist" }, p.artist) : null),
+      h("div", { class: "player", hidden: true }),
       syncChips(p),
       h("div", { class: "card-actions" },
+        playable ? h("button", {
+          class: "btn btn-small js-play", type: "button", "aria-expanded": "false",
+          onclick: () => togglePlayer(card, p),
+        }, h("span", { "aria-hidden": "true", class: "play-mark" }, "▶"), h("span", null, "PLAY")) : null,
         h("button", {
           class: "btn btn-small js-toggle", type: "button", "aria-expanded": "false", "aria-controls": "c-" + p.id,
           onclick: () => toggleComments(card, p.id),
@@ -250,16 +368,27 @@
     return card;
   }
 
-  // Replace a card in place (keeping an open comment thread), or add it.
+  // Replace a card in place, keeping an open comment thread and a playing player
+  // (the feed refreshes every 45 seconds, which must not stop the music), or add it.
   function upsertCard(p, atTop) {
     const list = $("posts");
     const old = list.querySelector('li[data-id="' + CSS.escape(p.id) + '"]');
     const card = buildCard(p);
+    const placeholder = list.querySelector(".empty");
+    if (placeholder) placeholder.remove();
     if (old) {
       const oldComments = old.querySelector(".comments");
       if (oldComments && !oldComments.hidden) {
         card.querySelector(".comments").replaceWith(oldComments);
         card.querySelector(".js-toggle").setAttribute("aria-expanded", "true");
+      }
+      const oldPlayer = old.querySelector(".player");
+      const play = card.querySelector(".js-play");
+      if (oldPlayer && !oldPlayer.hidden && play) {
+        card.querySelector(".player").replaceWith(oldPlayer);
+        play.setAttribute("aria-expanded", "true");
+        play.firstChild.textContent = "■";
+        play.lastChild.textContent = "HIDE";
       }
       old.replaceWith(card);
     } else if (atTop) {
@@ -267,6 +396,7 @@
     } else {
       list.append(card);
     }
+    $("posts").classList.remove("is-loading");
     say("feed-status", "");
   }
 

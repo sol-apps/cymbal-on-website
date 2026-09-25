@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://js-cdn.music.apple.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.apple.com; frame-src https://*.apple.com; form-action 'self'; base-uri 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://js-cdn.music.apple.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.apple.com; frame-src https://*.apple.com https://open.spotify.com https://www.youtube-nocookie.com; form-action 'self'; base-uri 'none'; object-src 'none'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>Cymbal on Website</title>
   <meta name="description" content="Friends share music, talk about it, and keep three playlists in sync.">
@@ -33,20 +33,27 @@
 
   <main id="main" class="wrap">
     <form id="composer" class="panel composer" novalidate>
-      <label for="url" class="label">SONG LINK</label>
-      <input id="url" name="url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
-             maxlength="500" placeholder="Paste a Spotify, Apple Music or YouTube link" required>
-      <label for="caption" class="label">SAY SOMETHING <span class="label-note">optional</span></label>
-      <textarea id="caption" name="caption" rows="2" maxlength="500"></textarea>
-      <span id="caption-count" class="count">0/500</span>
-      <div class="composer-foot">
-        <div class="name-field">
-          <label for="name" class="label">YOUR NAME</label>
-          <input id="name" name="name" type="text" maxlength="32" autocomplete="nickname" required>
-        </div>
-        <button id="post" class="btn btn-primary" type="submit">POST</button>
+      <label for="url" class="label">SHARE A SONG</label>
+      <div class="url-field">
+        <input id="url" name="url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
+               maxlength="500" placeholder="Paste a Spotify, Apple Music or YouTube link" required aria-describedby="url-kind">
+        <span id="url-kind" class="url-kind" aria-live="polite"></span>
       </div>
-      <p class="hint">Posting tries to add the song to all three linked playlists.</p>
+      <div id="composer-more" class="composer-more" hidden>
+        <label for="caption" class="label">SAY SOMETHING <span class="label-note">optional</span></label>
+        <textarea id="caption" name="caption" rows="2" maxlength="500"></textarea>
+        <span id="caption-count" class="count">0/500</span>
+        <div class="composer-foot">
+          <div class="name-field">
+            <label for="name" class="label">YOUR NAME</label>
+            <input id="name" name="name" type="text" maxlength="32" autocomplete="nickname" required>
+            <p id="name-known" class="name-known" hidden>Posting as <strong id="name-shown"></strong>
+              <button id="name-change" class="link-btn" type="button">change</button></p>
+          </div>
+          <button id="post" class="btn btn-primary" type="submit">POST</button>
+        </div>
+        <p class="hint">Posting adds the song to all three playlists.</p>
+      </div>
       <p id="composer-status" class="status" role="status" aria-live="polite"></p>
     </form>
 
