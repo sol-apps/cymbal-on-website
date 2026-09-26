@@ -293,15 +293,15 @@
   }
 
   // The embed for a post's own link, built only from the id in a canonical URL the
-  // server produced. Loaded on request, so nobody's browser talks to Spotify, Google
-  // or Apple just by opening the feed.
+  // server produced. Every card shows its player, loaded lazily so only the posts
+  // near the screen talk to Spotify, Google or Apple. Nothing autoplays.
   function embedFor(url) {
     let m;
     if ((m = /^https:\/\/open\.spotify\.com\/track\/([A-Za-z0-9]{22})$/.exec(url))) {
       return { src: "https://open.spotify.com/embed/track/" + m[1], cls: "player-spotify" };
     }
     if ((m = /^https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{11})$/.exec(url))) {
-      return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1", cls: "player-youtube" };
+      return { src: "https://www.youtube-nocookie.com/embed/" + m[1], cls: "player-youtube" };
     }
     if ((m = /^https:\/\/music\.apple\.com\/([a-z]{2})\/song\/([0-9]{1,15})$/.exec(url))) {
       return { src: "https://embed.music.apple.com/" + m[1] + "/song/" + m[2], cls: "player-apple" };
@@ -309,29 +309,15 @@
     return null;
   }
 
-  function togglePlayer(card, p) {
-    const box = card.querySelector(".player");
-    const btn = card.querySelector(".js-play");
-    if (!box.hidden) {
-      box.hidden = true;
-      box.replaceChildren();
-      btn.setAttribute("aria-expanded", "false");
-      btn.firstChild.textContent = "▶";
-      btn.lastChild.textContent = "PLAY";
-      return;
-    }
+  function player(p) {
     const e = embedFor(p.url);
-    if (!e) return;
-    box.className = "player " + e.cls;
-    box.replaceChildren(h("iframe", {
-      src: e.src, title: "Player: " + (p.title || p.source_label + " track"), loading: "lazy",
-      allow: "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture",
-      referrerpolicy: "strict-origin-when-cross-origin",
-    }));
-    box.hidden = false;
-    btn.setAttribute("aria-expanded", "true");
-    btn.firstChild.textContent = "■";
-    btn.lastChild.textContent = "HIDE";
+    if (!e) return null;
+    return h("div", { class: "player " + e.cls },
+      h("iframe", {
+        src: e.src, title: "Player: " + (p.title || p.source_label + " track"), loading: "lazy",
+        allow: "clipboard-write; encrypted-media; fullscreen; picture-in-picture",
+        referrerpolicy: "strict-origin-when-cross-origin",
+      }));
   }
 
   function buildCard(p) {
@@ -341,7 +327,6 @@
     const fallback = (p.source_label || "Unknown") + " track";
     const title = p.title || (p.unavailable ? "Couldn't look this one up" : (p.resolving && !stale ? "Finding the track details…" : fallback));
     const count = p.comment_count || 0;
-    const playable = !!embedFor(p.url);
     const card = h("li", { class: "card panel", "data-id": p.id },
       h("div", { class: "card-head" },
         avatar(p.poster),
@@ -351,16 +336,12 @@
       h("div", { class: "song" },
         h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title)),
         p.artist ? h("p", { class: "artist" }, p.artist) : null),
-      h("div", { class: "player", hidden: true }),
+      player(p),
       syncChips(p),
       h("div", { class: "card-actions" },
-        playable ? h("button", {
-          class: "btn btn-small js-play", type: "button", "aria-expanded": "false",
-          onclick: () => togglePlayer(card, p),
-        }, h("span", { "aria-hidden": "true", class: "play-mark" }, "▶"), h("span", null, "PLAY")) : null,
         h("button", {
           class: "btn btn-small js-toggle", type: "button", "aria-expanded": "false", "aria-controls": "c-" + p.id,
-          onclick: () => toggleComments(card, p.id),
+          onclick: (ev) => toggleComments(ev.currentTarget.closest(".card"), p.id),
         }, count ? "COMMENTS (" + count + ")" : "COMMENT"),
         p.can_delete ? h("button", { class: "btn-remove", type: "button", onclick: () => removePost(p.id) },
           h("span", { "aria-hidden": "true" }, "✕"), "Remove") : null),
@@ -368,8 +349,8 @@
     return card;
   }
 
-  // Replace a card in place, keeping an open comment thread and a playing player
-  // (the feed refreshes every 45 seconds, which must not stop the music), or add it.
+  // Replace a card in place, keeping an open comment thread and the player (the feed
+  // refreshes every 45 seconds, which must not stop the music), or add it.
   function upsertCard(p, atTop) {
     const list = $("posts");
     const old = list.querySelector('li[data-id="' + CSS.escape(p.id) + '"]');
@@ -383,14 +364,18 @@
         card.querySelector(".js-toggle").setAttribute("aria-expanded", "true");
       }
       const oldPlayer = old.querySelector(".player");
-      const play = card.querySelector(".js-play");
-      if (oldPlayer && !oldPlayer.hidden && play) {
-        card.querySelector(".player").replaceWith(oldPlayer);
-        play.setAttribute("aria-expanded", "true");
-        play.firstChild.textContent = "■";
-        play.lastChild.textContent = "HIDE";
+      const freshPlayer = card.querySelector(".player");
+      if (oldPlayer && freshPlayer) {
+        // An iframe reloads the moment it leaves the document, so the player never
+        // moves: the refreshed card's other parts move in around it instead.
+        const parts = [...card.children];
+        const at = parts.indexOf(freshPlayer);
+        [...old.children].forEach((c) => { if (c !== oldPlayer) c.remove(); });
+        oldPlayer.before(...parts.slice(0, at));
+        oldPlayer.after(...parts.slice(at + 1));
+      } else {
+        old.replaceWith(card);
       }
-      old.replaceWith(card);
     } else if (atTop) {
       list.prepend(card);
     } else {
