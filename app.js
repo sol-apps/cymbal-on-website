@@ -8,8 +8,8 @@
  * Nobody signs in to post. This browser gets a random private key the first time the
  * page loads and sends it as X-Cymbal-Key; the server stores only its hash, and it is
  * what lets this browser remove its own posts. The typed name is remembered here.
- * The owner signs in from the footer for the owner panel; that session is thirty
- * minutes and never renewed silently (pb-auth.js).
+ * The owner signs in from the footer, with an email and password, for the owner
+ * panel; that session is thirty minutes and never renewed silently (pb-auth.js).
  */
 (() => {
   "use strict";
@@ -489,13 +489,37 @@
 
   // ── the owner ─────────────────────────────────────────────────────────────
 
-  $("owner-signin").addEventListener("click", async () => {
-    const btn = $("owner-signin");
+  function closeLogin() {
+    $("owner-login").hidden = true;
+    $("owner-password").value = "";
+    say("owner-login-status", "");
+  }
+
+  $("owner-signin").addEventListener("click", () => {
+    const form = $("owner-login");
+    if (!form.hidden) return closeLogin();
+    form.hidden = false;
+    $("owner-email").focus();
+  });
+
+  $("owner-login-cancel").addEventListener("click", closeLogin);
+
+  $("owner-login").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const email = $("owner-email").value.trim();
+    const password = $("owner-password").value;
+    if (!email || !password) return say("owner-login-status", "Enter the owner email and password.", "error");
+    const btn = $("owner-login-go");
     btn.disabled = true;
+    say("owner-login-status", "Signing in…");
     try {
-      await PBAuth.signIn();
+      await PBAuth.signIn(email, password);
+      closeLogin();
     } catch (err) {
-      say("composer-status", "Owner sign-in didn't complete.", "error");
+      const status = err && err.status;
+      say("owner-login-status", status === 0 ? "Couldn't reach Cymbal. Check your connection."
+        : status === 429 ? "Too many attempts. Wait a minute and try again."
+        : "That email and password didn't match.", "error");
     } finally {
       btn.disabled = false;
     }
@@ -883,6 +907,7 @@
     const owner = !!user && user.role === "admin";
     $("signout").hidden = !user;
     $("owner-signin").hidden = !!user;
+    if (user) closeLogin();
     if (owner) {
       loadOwner();
     } else {

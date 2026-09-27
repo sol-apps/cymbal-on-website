@@ -21,10 +21,12 @@ sends it as `X-Cymbal-Key`; only its hash is stored, and it is what lets that br
 remove its own posts. Rate limits are per key (10 posts, 60 comments an hour) and
 per network (30 and 180), using a salted hash of the client address.
 
-Only the owner signs in, from the footer's "Owner" link, through `id.solhann.net`.
-That needs an `admin` grant on `cymbal-on-website` at `id-admin.solhann.net`. The
-owner panel connects the music services, repairs matches and can remove any post or
-comment. Friends need no grant and never connect a music account.
+Only the owner signs in, from the footer's "Owner" link, with an email and password
+held in this app's own PocketBase `users` collection. There is no single sign-on and
+no sign-up: the owner's account is created in the PocketBase dashboard (`/_/`) by a
+superuser, with `role` set to `admin` there. Nothing else can set `role`. The owner
+panel connects the music services, repairs matches and can remove any post or
+comment. Friends never sign in and never connect a music account.
 
 ## How a post reaches three playlists
 
@@ -48,8 +50,10 @@ comment. Friends need no grant and never connect a music account.
 
     index.html app.js app.css theme.js   the page (no build step)
     playlists.html playlists.js          the three playlist links, from the footer
-    pb-auth.js pb_hooks/identity.pb.js pb_migrations/1756540000_identity.js
-                                         the platform identity layer: do not edit
+    pb-auth.js                           the owner's password sign-in (browser side)
+    pb_migrations/1756540000_identity.js users.role + its rules (from the SSO era; applied)
+    pb_migrations/1790467200_owner_password_auth.js
+                                         password auth on, OAuth2 off, no sign-up
     pb_migrations/1757520000_cymbal_schema.js   Cymbal's collections, all rules null
     pb_hooks/main.pb.js                  routes + the cron
     pb_hooks/lib/                        urls, match (pure), feed, sync, providers, owner
@@ -60,8 +64,8 @@ comment. Friends need no grant and never connect a music account.
 ## Runtime secrets
 
 Set with `platform/bin/pb-secret set cymbal-on-website.<KEY>` (value on stdin), then
-`platform/bin/pb-provision cymbal-on-website --push-env`. `--push-env` keeps the
-`OIDC_*` identity settings that provisioning wrote.
+`platform/bin/pb-provision cymbal-on-website --push-env`. Any `OIDC_*` settings
+provisioning wrote are no longer read by the app.
 
 | Key | What |
 |---|---|

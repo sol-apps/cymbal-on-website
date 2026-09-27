@@ -3,7 +3,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const crypto = require("node:crypto");
 
 const root = path.join(__dirname, "..", "..");
 const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
@@ -27,23 +26,16 @@ test("every page has a CSP and no inline script", () => {
   }
 });
 
-// Against the template as COMMITTED, not the working tree: another session's
-// unreviewed edits to the template must neither fail this app nor be mistaken for
-// the version this app should carry.
-test("the identity layer is byte-identical to the committed platform template", (t) => {
-  const platform = path.join(root, "..", "platform");
-  if (!fs.existsSync(path.join(platform, "greenlight", "app-template"))) return t.skip("platform template not beside this checkout");
-  const { execFileSync } = require("node:child_process");
-  const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
-  for (const f of ["pb-auth.js", "pb_hooks/identity.pb.js", "pb_migrations/1756540000_identity.js", "vendor/pocketbase.umd.js"]) {
-    let committed;
-    try {
-      committed = execFileSync("git", ["-C", platform, "show", "HEAD:greenlight/app-template/" + f], { maxBuffer: 1 << 26 });
-    } catch (_) {
-      committed = fs.readFileSync(path.join(platform, "greenlight", "app-template", f));
-    }
-    assert.equal(sha(fs.readFileSync(path.join(root, f))), sha(committed), f + " differs from the committed template");
+test("no single sign-on is left: nothing writes role from a claim, and sign-in is a password", () => {
+  assert.ok(!fs.existsSync(path.join(root, "pb_hooks", "identity.pb.js")), "identity.pb.js is back");
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+  for (const f of walk(path.join(root, "pb_hooks"))) {
+    assert.doesNotMatch(fs.readFileSync(f, "utf8"), /onRecordAuthWithOAuth2Request|greenlight_roles|OIDC_/, path.relative(root, f));
   }
+  const auth = read("pb-auth.js");
+  assert.match(auth, /authWithPassword\(/);
+  assert.doesNotMatch(auth, /authWithOAuth2|id\.solhann\.net/);
 });
 
 test("hook sources carry no control characters", () => {

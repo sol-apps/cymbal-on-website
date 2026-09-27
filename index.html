@@ -57,6 +57,18 @@
       <p id="composer-status" class="status" role="status" aria-live="polite"></p>
     </form>
 
+    <form id="owner-login" class="panel owner-login" hidden novalidate>
+      <label for="owner-email" class="label">OWNER EMAIL</label>
+      <input id="owner-email" name="email" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" required>
+      <label for="owner-password" class="label">PASSWORD</label>
+      <input id="owner-password" name="password" type="password" autocomplete="current-password" required>
+      <div class="row">
+        <button id="owner-login-cancel" class="btn btn-small btn-quiet" type="button">CANCEL</button>
+        <button id="owner-login-go" class="btn btn-small" type="submit">SIGN IN</button>
+      </div>
+      <p id="owner-login-status" class="status" role="status" aria-live="polite"></p>
+    </form>
+
     <section id="owner" class="panel owner" hidden aria-labelledby="owner-title"></section>
 
     <section id="feed" class="feed" aria-labelledby="feed-title" tabindex="-1">

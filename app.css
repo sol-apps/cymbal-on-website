@@ -169,7 +169,7 @@ a { color: inherit; text-underline-offset: 3px; }
 }
 .label-note { font-family: var(--read); font-size: 12px; letter-spacing: 0; color: var(--muted); }
 
-input[type="url"], input[type="text"], textarea {
+input[type="url"], input[type="text"], input[type="email"], input[type="password"], textarea {
   width: 100%;
   font: inherit;
   font-size: 16px; /* 16px stops iOS zooming into the field */
@@ -223,6 +223,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .composer-foot .btn { flex: none; padding: 0 18px; }
 .comment-form .row input { flex: 1 1 140px; min-width: 0; }
 .foot .foot-btn { color: inherit; font-size: 13px; text-decoration: underline; }
+.owner-login { display: grid; gap: 4px; margin-top: 12px; }
+.owner-login input { margin-bottom: 6px; }
+.owner-login .row { display: flex; gap: 8px; justify-content: flex-end; }
+.owner-login .status:empty { min-height: 0; margin-top: 0; }
 
 /* ── feed ───────────────────────────────────────────────────────────────── */
 

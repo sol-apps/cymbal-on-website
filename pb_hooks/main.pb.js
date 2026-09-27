@@ -11,9 +11,9 @@
  *     reads, and posts under a typed name. A browser's private key (X-Cymbal-Key)
  *     is what lets it remove its own posts; rate limits are per key and per network.
  *   - /api/cymbal/owner/* requires a signed-in `users` record with role "admin".
- *     Only the owner signs in, through id.solhann.net, and only for this panel;
- *     the identity layer (identity.pb.js) writes that role from the provider's
- *     claim on every login.
+ *     Only the owner signs in (PocketBase email + password), and only for this
+ *     panel; role is set by a superuser in the dashboard and no request can set
+ *     it (see pb_migrations/1790467200_owner_password_auth.js).
  *   - /api/cymbal/oauth/{provider}/callback is authenticated by a single-use state
  *     bound to the owner (lib/owner.js).
  *   - the collections themselves are superuser-only (every API rule null), so none

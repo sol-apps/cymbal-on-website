@@ -3,8 +3,8 @@
  * lib/owner.js — the owner's panel: provider connections, queue health, repairs.
  *
  * Every export is reached only through a route that has already called
- * util.requireOwner(e), which reads users.role — set server-side from the identity
- * provider's claim on each login, never by a request. The OAuth callback is the one
+ * util.requireOwner(e), which reads users.role — set by a superuser in the
+ * PocketBase dashboard, never by a request. The OAuth callback is the one
  * exception: a redirect back from Spotify or Google carries no PocketBase token, so
  * it is authenticated by its `state` instead — random, stored only as a hash,
  * single-use, ten minutes, and bound to an owner who must STILL be the owner.

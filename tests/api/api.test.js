@@ -162,15 +162,41 @@ test("the collection API stays closed to everyone but the superuser", async () =
   }
 });
 
-test("identity: a signed-in person cannot make themselves owner, and sessions are not renewed locally", async () => {
+test("identity: a signed-in person cannot make themselves owner, and nobody can sign up", async () => {
   const r = await call("PATCH", "/api/collections/users/records/" + U.member.id, { token: U.member.token, body: { role: "admin" } });
   assert.notEqual(r.status, 200);
   const me = await su("GET", "/api/collections/users/records/" + U.member.id);
   assert.equal(me.json.role, "user");
-  const refresh = await call("POST", "/api/collections/users/auth-refresh", { token: U.member.token, body: {} });
-  assert.equal(refresh.status, 400);
-  const signup = await call("POST", "/api/collections/users/records", { body: { email: "x@cymbal.invalid", password: "abcdefgh1", passwordConfirm: "abcdefgh1" } });
-  assert.notEqual(signup.status, 200, "no self-service accounts");
+  for (const token of ["", U.member.token]) {
+    const signup = await call("POST", "/api/collections/users/records", { token, body: { email: "x@cymbal.invalid", password: "abcdefgh1", passwordConfirm: "abcdefgh1", role: "admin" } });
+    assert.notEqual(signup.status, 200, "no self-service accounts");
+  }
+});
+
+test("identity: the owner signs in with a PocketBase password; there is no SSO", async () => {
+  const methods = await call("GET", "/api/collections/users/auth-methods");
+  assert.equal(methods.status, 200, methods.text);
+  assert.equal(methods.json.password.enabled, true);
+  assert.equal(methods.json.oauth2.enabled, false);
+  assert.equal((methods.json.oauth2.providers || []).length, 0);
+
+  const made = {};
+  for (const [name, role] of [["pwowner", "admin"], ["pwmember", "user"]]) {
+    const email = name + "@cymbal.invalid";
+    const pw = "pw-" + crypto.randomBytes(9).toString("hex");
+    const c = await su("POST", "/api/collections/users/records", { email, password: pw, passwordConfirm: pw, name, role });
+    assert.equal(c.status, 200, c.text);
+    const login = await call("POST", "/api/collections/users/auth-with-password", { body: { identity: email, password: pw } });
+    assert.equal(login.status, 200, login.text);
+    assert.equal(login.json.record.role, role);
+    made[name] = login.json.token;
+  }
+  assert.equal((await call("GET", "/api/cymbal/owner/status", { token: made.pwowner })).status, 200, "password-signed-in admin");
+  assert.equal((await call("GET", "/api/cymbal/owner/status", { token: made.pwmember })).status, 403, "password-signed-in non-admin");
+  assert.equal((await call("GET", "/api/cymbal/owner/status")).status, 401, "anonymous");
+
+  const wrong = await call("POST", "/api/collections/users/auth-with-password", { body: { identity: "pwowner@cymbal.invalid", password: "not-it" } });
+  assert.equal(wrong.status, 400);
 });
 
 // ── posting ─────────────────────────────────────────────────────────────────
