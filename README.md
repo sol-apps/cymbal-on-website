@@ -2,110 +2,25 @@
 solhann_app: true
 slug: cymbal-on-website
 title: Cymbal on Website
-description: Friends share music, talk about it, and keep three playlists in sync.
+description: Music sharing forum + playlists
 ---
 
 # Cymbal on Website
 
-Friends post a Spotify, Apple Music or YouTube song link, add a caption, and talk
-about it. Every post is also added to three playlists called **Cymbal on Website** on
-the owner's Spotify, YouTube and Apple Music accounts.
+Music sharing forum + playlists.
 
-**Live:** https://cymbal-on-website.solhann.net
-
-## Who can use it
-
-Anyone with the link. There are no accounts: people post and comment under a name
-they type, remembered in their browser. Each browser makes a random private key and
-sends it as `X-Cymbal-Key`; only its hash is stored, and it is what lets that browser
-remove its own posts. Rate limits are per key (10 posts, 60 comments an hour) and
-per network (30 and 180), using a salted hash of the client address.
-
-Only the owner signs in, from the footer's "Owner" link, with an email and password
-held in this app's own PocketBase `users` collection. There is no single sign-on and
-no sign-up: the owner's account is created in the PocketBase dashboard (`/_/`) by a
-superuser, with `role` set to `admin` there. Nothing else can set `role`. The owner
-panel connects the music services, repairs matches and can remove any post or
-comment. Friends never sign in and never connect a music account.
+https://cymbal-on-website.solhann.net
 
 ## How a post reaches three playlists
 
-- The link someone posts is authoritative and never rewritten.
-- A one-minute worker (`pb_hooks/lib/sync.js`) looks the track up on its own service,
-  then finds it on the other two in a fixed order: a unique ISRC match, a unique
-  MusicBrainz relationship, then a unique exact title/artist/version match within
-  3s (5s involving YouTube). Live, remix, remaster, acoustic, cover, sped-up and
-  slowed versions must match exactly. No fuzzy matching and no AI.
-- Anything uncertain is marked **attention** instead of guessed; the owner fixes it
-  by pasting the exact link.
-- Each playlist holds a song once, however many times it is posted
-  (`playlist_memberships`). A write whose outcome is unknown is verified against the
-  playlist before any retry.
-- Spotify and YouTube update in the background. Apple Music writes need the owner's
-  Music User Token, which Apple ties to one browser, so they wait in `pending_device`
-  until the owner opens Cymbal in an authorised browser, which then drains them.
-- Playlists are append-only in v1. Personal playlist export is deferred.
-
-## Layout
-
-    index.html app.js app.css theme.js   the page (no build step)
-    playlists.html playlists.js          the three playlist links, from the footer
-    pb-auth.js                           the owner's password sign-in (browser side)
-    pb_migrations/1756540000_identity.js users.role + its rules (from the SSO era; applied)
-    pb_migrations/1790467200_owner_password_auth.js
-                                         password auth on, OAuth2 off, no sign-up
-    pb_migrations/1757520000_cymbal_schema.js   Cymbal's collections, all rules null
-    pb_hooks/main.pb.js                  routes + the cron
-    pb_hooks/lib/                        urls, match (pure), feed, sync, providers, owner
-    tests/unit                           node --test, loads the same lib files
-    tests/api                            end-to-end against a local PocketBase + mock providers
-    tools/apple-dev-token.py             mints the Apple developer token locally
-
-## Runtime secrets
-
-Set with `platform/bin/pb-secret set cymbal-on-website.<KEY>` (value on stdin), then
-`platform/bin/pb-provision cymbal-on-website --push-env`. Any `OIDC_*` settings
-provisioning wrote are no longer read by the app.
-
-| Key | What |
-|---|---|
-| `CYMBAL_TOKEN_KEY` | exactly 32 characters; encrypts stored Spotify/Google tokens (`openssl rand -hex 16`) |
-| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Spotify developer app |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth web client with the YouTube Data API v3 enabled |
-| `YOUTUBE_API_KEY` | optional; YouTube reads without spending the owner's token |
-| `APPLE_DEVELOPER_TOKEN` | from `tools/apple-dev-token.py`; expires after at most 180 days |
-| `CYMBAL_SPOTIFY_METADATA_TRANSFER` | `allowed` to match Spotify-posted songs on the other services; anything else keeps it off |
-| `CYMBAL_APPLE_STOREFRONT`, `CYMBAL_SPOTIFY_MARKET` | optional, default `gb` / `GB` |
-
-## Provider setup (owner, once)
-
-Exact callback URLs, also shown in the owner panel:
-
-- Spotify: `https://cymbal-on-website.solhann.net/api/cymbal/oauth/spotify/callback`
-- Google: `https://cymbal-on-website.solhann.net/api/cymbal/oauth/youtube/callback`
-
-1. **Spotify**: create an app at developer.spotify.com (Development Mode is enough:
-   only the owner's account ever authorises; it needs Spotify Premium), add the
-   callback, enable the Web API.
-2. **Google**: in Google Cloud, enable YouTube Data API v3, configure the OAuth consent
-   screen, create a Web client with the callback. Publish the app ("In production")
-   rather than leaving it in Testing, or Google expires the refresh token every seven
-   days; the unverified-app warning only affects the owner.
-3. **Apple**: in the Apple Developer account, create a Media ID and a MusicKit key,
-   then mint the token with `tools/apple-dev-token.py`.
-4. Push the secrets, sign in as the owner, and in the owner panel: connect Spotify and
-   YouTube, create their playlists, then "Authorise in this browser" for Apple Music
-   and create that playlist.
-
-## Tests
-
-    node --test tests/unit
-    bash tests/api/run.sh        # local PocketBase on a spare port, mock providers
-
-## Operations
-
-- Backups: nightly to the instance's own disk, enabled on prod as root with
-  `tools/enable-local-backups.sh` (prod has no `jq`, which `platform/bin/pb-backups`
-  needs). Offsite backups need the platform S3 credentials in `pb-secret` and remain
-  unverified until those exist.
-- Health: `https://cymbal-on-website.solhann.net/api/health`.
+- Whatever link someone posts is kept as is.
+- Every minute, a background job looks the song up and finds it on the other two
+  services: first by ISRC, then MusicBrainz, then an exact title/artist/version/length match.
+- If nothing matches exactly, it adds the closest candidate anyway and flags it under
+  "Guessed, to check" in the owner panel. It won't swap a live version, remix or
+  cover for the original, or pick a different artist.
+- If there's nothing close enough, it shows up under "Needs a look", and the owner
+  pastes the right link.
+- Each playlist gets a song once, however many times it's posted.
+- Spotify and YouTube update in the background. Apple Music only adds songs while the
+  owner has Cymbal open in a browser they've authorised.
