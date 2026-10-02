@@ -1,7 +1,7 @@
 name: Deploy to solhann.net
 
-# Thin caller — the real pipeline lives once in sol-apps/workflows.
-# The repo name IS the slug IS the subdomain; nothing here is app-specific.
+# A push to main deploys; the first one created the app. The pipeline lives once in
+# sol-apps/workflows (simple.yml). The repo name is the slug is the subdomain.
 
 on:
   push:
@@ -14,5 +14,5 @@ concurrency:
 
 jobs:
   deploy:
-    uses: sol-apps/workflows/.github/workflows/deploy.yml@main
+    uses: sol-apps/workflows/.github/workflows/simple.yml@main
     secrets: inherit
