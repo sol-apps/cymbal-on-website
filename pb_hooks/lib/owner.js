@@ -227,6 +227,15 @@ function listSyncs(app, e) {
         updated: r.getString("updated"),
         steps: ev.steps || {},
         ambiguous: (ev.ambiguous || []).slice(0, 5),
+        // The nearest candidates and why each was turned down, so a "no match" says
+        // whether the search found nothing or found the song and disagreed with it.
+        near_misses: (ev.rejected || []).filter((x) => x && x.title).slice(0, 3).map((x) => ({
+          title: String(x.title).slice(0, 200),
+          artists: (x.artists || []).slice(0, 4).map((a) => String(a).slice(0, 100)),
+          duration_ms: Number(x.duration_ms) || 0,
+          reasons: (x.reasons || []).slice(0, 6),
+        })),
+        want_duration_ms: ev.want ? Number(ev.want.duration_ms) || 0 : 0,
         post: p ? {
           id: p.id,
           title: p.getString("title"),

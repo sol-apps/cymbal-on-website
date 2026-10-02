@@ -120,7 +120,14 @@ function searchCandidates(app, target, source) {
   const t = match().searchTerms(source);
   if (!t.title || !t.artist) return [];
   const extra = t.qualifiers.length ? " " + t.qualifiers.join(" ") : "";
-  if (target === "spotify") return P.spotify.search('track:"' + t.title + '" artist:"' + t.artist + '"' + extra);
+  if (target === "spotify") {
+    // Spotify's artist: filter matches one artist, so a joint credit as posted on
+    // YouTube ("A & B") can find nothing. Then try its first name alone; decide()
+    // still requires every side's primary artist to agree.
+    const found = P.spotify.search('track:"' + t.title + '" artist:"' + t.artist + '"' + extra);
+    if (found.length || !t.firstArtist) return found;
+    return P.spotify.search('track:"' + t.title + '" artist:"' + t.firstArtist + '"' + extra);
+  }
   const term = t.artist + " " + t.title + extra;
   if (target === "apple_music") return P.apple.search(term);
   return P.youtube.search(app, term);

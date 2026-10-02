@@ -299,7 +299,9 @@ function decide(source, candidates, opts) {
       tier = youtubeTier(c, source.artists);
       if (!tier) reasons.push("channel");
     }
-    if (reasons.length) rejected.push({ id: c.id, reasons: reasons });
+    if (reasons.length) {
+      rejected.push({ id: c.id, title: c.title, artists: c.artists, duration_ms: c.durationMs, reasons: reasons });
+    }
     else agreeing.push({ c: c, tier: tier });
   });
 
@@ -356,10 +358,14 @@ function searchTerms(source) {
   const t = parseTitle(source.title);
   const words = t.qualifiers.filter((q) => q.indexOf("v:") !== 0).map((q) => q.replace("_", " "));
   const artist = (source.artists && source.artists[0]) || "";
+  // The first name in a joint credit ("A & B" -> "A"), for catalogues whose artist
+  // filter matches a single artist. Empty when the credit is already one name.
+  const first = String(artist).split(/\s+(?:&|and|x|feat\.?|ft\.?|featuring|with)\s+|\s*,\s*/i)[0].trim();
   return {
     title: String(source.title || "").replace(/[\(\[].*?[\)\]]/g, " ").split(/\s+[-\u2013\u2014|]\s+/)[0]
       .replace(/\s+(feat\.?|ft\.?|featuring)\s+.*$/i, "").replace(/["]/g, "").trim(),
     artist: artist.replace(/["]/g, "").trim(),
+    firstArtist: first && first !== String(artist).trim() ? first.replace(/["]/g, "") : "",
     qualifiers: words,
   };
 }

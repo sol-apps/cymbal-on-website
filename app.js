@@ -676,11 +676,20 @@
       } catch (err) { ownerSay(err.message, "error"); }
     });
     const steps = Object.keys(r.steps || {}).map((k) => k + ": " + r.steps[k]).join(", ");
+    const mmss = (ms) => { const t = Math.round(ms / 1000); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+    const near = (r.near_misses || []).map((n) => h("span", { class: "small" },
+      "Closest: " + n.title + (n.artists.length ? " by " + n.artists.join(", ") : "") +
+      (n.duration_ms ? " (" + mmss(n.duration_ms) + (r.want_duration_ms ? " vs " + mmss(r.want_duration_ms) : "") + ")" : "") +
+      ", differs on " + n.reasons.join(", ")));
+    const searched = r.reason === "no_match" && steps && !(r.near_misses || []).length
+      ? h("span", { class: "small" }, "The search found nothing to compare against.") : null;
     return h("li", null,
       h("strong", null, (r.post ? (r.post.title || "Untitled") + (r.post.artist ? " by " + r.post.artist : "") : "Removed post") + " to " + r.target_label),
       r.post ? h("span", { class: "small" }, extLink(r.post.url, "original link")) : null,
       h("span", null, r.detail || REASONS[r.reason] || r.reason),
       steps ? h("span", { class: "small" }, "Tried " + steps) : null,
+      ...near,
+      searched,
       form,
       h("div", { class: "row" }, h("button", { class: "btn btn-small", type: "button", onclick: async () => {
         try {

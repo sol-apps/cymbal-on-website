@@ -149,3 +149,18 @@ test("search terms carry qualifiers but no brackets or credits", () => {
   assert.equal(t.artist, "Band");
   assert.deepEqual(t.qualifiers, ["live"]);
 });
+
+test("search terms offer the first name of a joint credit", () => {
+  assert.equal(m.searchTerms({ title: "Song", artists: ["300SkullsAndCounting & Jenny Sparks"] }).firstArtist, "300SkullsAndCounting");
+  assert.equal(m.searchTerms({ title: "Song", artists: ["A, B and C"] }).firstArtist, "A");
+  assert.equal(m.searchTerms({ title: "Song", artists: ["Calvin Harris feat. Dua Lipa"] }).firstArtist, "Calvin Harris");
+  assert.equal(m.searchTerms({ title: "Song", artists: ["Simon & Garfunkel"] }).artist, "Simon & Garfunkel");
+  assert.equal(m.searchTerms({ title: "Song", artists: ["Jamie xx"] }).firstArtist, "");
+});
+
+test("rejected candidates keep what they were, for the owner panel", () => {
+  const r = m.decide({ provider: "youtube", title: "Song", artists: ["A"], durationMs: 213000 },
+    [{ provider: "spotify", id: "s1", title: "Song", artists: ["A"], durationMs: 190000, isrc: "" }], { target: "spotify" });
+  assert.equal(r.matched, false);
+  assert.deepEqual(r.evidence.rejected[0], { id: "s1", title: "Song", artists: ["A"], duration_ms: 190000, reasons: ["duration"] });
+});
