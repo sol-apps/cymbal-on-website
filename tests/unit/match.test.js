@@ -164,3 +164,46 @@ test("rejected candidates keep what they were, for the owner panel", () => {
   assert.equal(r.matched, false);
   assert.deepEqual(r.evidence.rejected[0], { id: "s1", title: "Song", artists: ["A"], duration_ms: 190000, reasons: ["duration"] });
 });
+
+test("best guess: a joint credit a little off in length is still picked, album first", () => {
+  const src = { provider: "youtube", title: "The Ballad of St Nick's Park", artists: ["300SkullsAndCounting & Jenny Sparks"], durationMs: 213000 };
+  const c = (id, albumType) => ({ provider: "spotify", id: id, title: "The Ballad of St Nick's Park",
+    artists: ["300SkullsAndCounting", "Jenny Sparks"], durationMs: 194000, isrc: "", albumType: albumType });
+  const g = m.bestGuess(src, [c("single1", "single"), c("album1", "album")], { target: "spotify" });
+  assert.equal(g.candidate.id, "album1");
+  assert.equal(g.confidence, "likely");
+  assert.deepEqual(g.notes, ["length (3:14 vs 3:33)"]);
+});
+
+test("best guess: a YouTube video with extra words in its title, or off the music channel", () => {
+  const src = { provider: "spotify", title: "Idontknow", artists: ["Jamie xx"], durationMs: 322000 };
+  const yt = (id, title, cat, ms) => ({ provider: "youtube", id: id, title: title, artists: ["Jamie xx"], durationMs: ms,
+    channel: "Jamie xx", privacy: "public", uploadStatus: "processed", live: false, categoryId: cat, licensed: false });
+  const g = m.bestGuess(src, [yt("v7", "Idontknow (7\" Version)", "10", 225000), yt("oona", "Idontknow (Oona Video)", "10", 322000)], { target: "youtube" });
+  assert.equal(g.candidate.id, "oona");
+  const h = m.bestGuess(src, [yt("plain", "Idontknow", "22", 322000)], { target: "youtube" });
+  assert.equal(h.candidate.id, "plain");
+  assert.ok(h.notes.some((n) => n.startsWith("channel")));
+  assert.equal(m.bestGuess(src, [Object.assign(yt("priv", "Idontknow", "10", 322000), { privacy: "private" })], { target: "youtube" }), null);
+});
+
+test("best guess never crosses to another kind of recording or another artist", () => {
+  const live = { provider: "spotify", title: "Song C - Live", artists: ["Band"], durationMs: 250000 };
+  assert.equal(m.bestGuess(live, [{ provider: "apple_music", id: "1", title: "Song C", artists: ["Band"], durationMs: 250500 }], { target: "apple_music" }), null);
+  const queen = { provider: "spotify", title: "Under Pressure", artists: ["Queen"], durationMs: 248000 };
+  assert.equal(m.bestGuess(queen, [{ provider: "apple_music", id: "2", title: "Under Pressure", artists: ["Queen Latifah"], durationMs: 248000 }], { target: "apple_music" }), null);
+  assert.equal(m.bestGuess(queen, [{ provider: "apple_music", id: "3", title: "Bohemian Rhapsody", artists: ["Queen"], durationMs: 248000 }], { target: "apple_music" }), null);
+  const remaster = m.bestGuess(queen, [{ provider: "apple_music", id: "4", title: "Under Pressure (Remastered 2011)", artists: ["Queen"], durationMs: 248000 }], { target: "apple_music" });
+  assert.equal(remaster.candidate.id, "4");
+});
+
+test("best guess between two equal recordings says so", () => {
+  const src = { provider: "spotify", title: "Echo Chamber", artists: ["Echo"], durationMs: 200000 };
+  const g = m.bestGuess(src, [
+    { provider: "apple_music", id: "1", title: "Echo Chamber", artists: ["Echo"], durationMs: 200500, isrc: "USCCC2400001", albumType: "album" },
+    { provider: "apple_music", id: "2", title: "Echo Chamber", artists: ["Echo"], durationMs: 199800, isrc: "USDDD2400001", albumType: "album" },
+  ], { target: "apple_music" });
+  assert.equal(g.candidate.id, "1");
+  assert.equal(g.confidence, "unsure");
+  assert.deepEqual(g.notes, ["1 other close candidate"]);
+});

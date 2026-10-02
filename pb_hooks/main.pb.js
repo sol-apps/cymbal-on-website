@@ -98,6 +98,11 @@ routerAdd("POST", "/api/cymbal/owner/syncs/{id}/retry", (e) => {
   return e.json(200, require(__hooks + "/lib/owner.js").retry(e.app, e.request.pathValue("id")));
 }, $apis.requireAuth("users"));
 
+routerAdd("POST", "/api/cymbal/owner/syncs/{id}/confirm", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/owner.js").confirm(e.app, e.request.pathValue("id")));
+}, $apis.requireAuth("users"));
+
 routerAdd("POST", "/api/cymbal/owner/syncs/{id}/override", (e) => {
   require(__hooks + "/lib/util.js").requireOwner(e);
   const body = e.requestInfo().body || {};

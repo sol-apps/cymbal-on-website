@@ -550,6 +550,7 @@
       return;
     }
     const status = h("p", { id: "owner-status", class: "status", role: "status", "aria-live": "polite" });
+    const review = h("div", { id: "owner-review" });
     const attention = h("div", { id: "owner-attention" });
     let open = false;
     try { open = sessionStorage.getItem("cymbal_owner_open") === "1"; } catch (_) { /* ignore */ }
@@ -564,11 +565,13 @@
           h("p", { class: "small" }, "Matching Spotify-posted songs to Apple Music and YouTube is off. Set CYMBAL_SPOTIFY_METADATA_TRANSFER=allowed once you've confirmed Spotify's terms permit it."),
         h("p", { class: "small" }, "Callback URLs: ", h("code", null, s.redirect_uris.spotify), " and ", h("code", null, s.redirect_uris.youtube)),
         status,
+        review,
         attention));
     details.addEventListener("toggle", () => {
       try { sessionStorage.setItem("cymbal_owner_open", details.open ? "1" : "0"); } catch (_) { /* ignore */ }
     });
     box.replaceChildren(details);
+    loadReview();
     loadAttention();
     const apple = s.providers.find((p) => p.provider === "apple_music");
     if (apple && apple.configured) appleAutoStart();
@@ -580,6 +583,7 @@
     if (c.pending) bits.push(c.pending + " waiting");
     if (c.pending_device) bits.push(c.pending_device + " waiting for this browser");
     if (c.attention) bits.push(c.attention + " need a look");
+    if (c.review) bits.push(c.review + " guessed, to check");
     bits.push((c.synced || 0) + " added");
     return bits.join(", ");
   }
@@ -664,6 +668,52 @@
     box.replaceChildren(h("h3", { class: "label" }, "NEEDS A LOOK"), h("ul", { class: "attn" }, data.syncs.map(attentionItem)));
   }
 
+  const mmss = (ms) => { const t = Math.round(ms / 1000); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+
+  // Best guesses the worker added without an exact match. Each one stays here until
+  // the owner says it's right or names the right item.
+  async function loadReview() {
+    const box = $("owner-review");
+    if (!box) return;
+    let data;
+    try { data = await api("/api/cymbal/owner/syncs?status=review"); } catch (err) { box.replaceChildren(); return; }
+    if (!data.syncs.length) { box.replaceChildren(); return; }
+    box.replaceChildren(h("h3", { class: "label" }, "GUESSED, TO CHECK"), h("ul", { class: "attn" }, data.syncs.map(reviewItem)));
+  }
+
+  function reviewItem(r) {
+    const g = r.guess || { confidence: "unsure", notes: [] };
+    const p = r.picked;
+    const input = h("input", { type: "url", inputmode: "url", placeholder: "Right " + r.target_label + " link", "aria-label": "The right " + r.target_label + " link for this song" });
+    const form = h("form", { novalidate: true }, input, h("button", { class: "btn btn-small", type: "submit" }, "REPLACE"));
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        const res = await api("/api/cymbal/owner/syncs/" + r.id + "/override", { method: "POST", body: { url: input.value.trim() } });
+        ownerSay(res.remove_url
+          ? "Saved; the right one is added on the next sync. Remove the wrong one from the " + r.target_label + " playlist yourself."
+          : "Saved. It'll be added on the next sync.", "ok");
+        loadReview();
+      } catch (err) { ownerSay(err.message, "error"); }
+    });
+    return h("li", null,
+      h("strong", null, (r.post ? (r.post.title || "Untitled") + (r.post.artist ? " by " + r.post.artist : "") : "Removed post") + " to " + r.target_label),
+      h("span", null, h("span", { class: "guess-tag is-" + g.confidence }, g.confidence === "likely" ? "LIKELY" : "UNSURE"), " Guessed: ",
+        r.target_url ? extLink(r.target_url, p ? p.title : "the guess") : (p ? p.title : "the guess"),
+        p && p.artists.length ? " by " + p.artists.join(", ") : "",
+        p && p.duration_ms ? " (" + mmss(p.duration_ms) + (r.want_duration_ms ? " vs " + mmss(r.want_duration_ms) : "") + ")" : ""),
+      g.notes.length ? h("span", { class: "small" }, "Differs on " + g.notes.join("; ")) : null,
+      r.post ? h("span", { class: "small" }, extLink(r.post.url, "original link")) : null,
+      h("div", { class: "row" }, h("button", { class: "btn btn-small btn-primary", type: "button", onclick: async () => {
+        try {
+          await api("/api/cymbal/owner/syncs/" + r.id + "/confirm", { method: "POST" });
+          ownerSay("Marked as right.", "ok");
+          loadReview();
+        } catch (err) { ownerSay(err.message, "error"); }
+      } }, "LOOKS RIGHT")),
+      form);
+  }
+
   function attentionItem(r) {
     const input = h("input", { type: "url", inputmode: "url", placeholder: "Exact " + r.target_label + " link", "aria-label": "Exact " + r.target_label + " link for this song" });
     const form = h("form", { novalidate: true }, input, h("button", { class: "btn btn-small btn-primary", type: "submit" }, "USE LINK"));
@@ -676,7 +726,6 @@
       } catch (err) { ownerSay(err.message, "error"); }
     });
     const steps = Object.keys(r.steps || {}).map((k) => k + ": " + r.steps[k]).join(", ");
-    const mmss = (ms) => { const t = Math.round(ms / 1000); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
     const near = (r.near_misses || []).map((n) => h("span", { class: "small" },
       "Closest: " + n.title + (n.artists.length ? " by " + n.artists.join(", ") : "") +
       (n.duration_ms ? " (" + mmss(n.duration_ms) + (r.want_duration_ms ? " vs " + mmss(r.want_duration_ms) : "") + ")" : "") +

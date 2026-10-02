@@ -58,6 +58,8 @@ function status(app) {
       STATUSES.forEach((s) => {
         counts[s] = app.countRecords("playlist_syncs", $dbx.exp("target = {:t} AND status = {:s}", { t: p, s: s }));
       });
+      counts.review = app.countRecords("playlist_syncs",
+        $dbx.exp("target = {:t} AND needs_review = TRUE AND status != 'cancelled'", { t: p }));
       const cool = u.parseTime(c.getString("cooldown_until")) > Date.now();
       const out = {
         provider: p,
@@ -201,11 +203,14 @@ function disconnect(app, provider) {
 }
 
 // GET /api/cymbal/owner/syncs?status=attention — the detail friends never see.
+// status=review lists the best guesses still waiting for the owner to check.
 function listSyncs(app, e) {
   const u = util();
   const st = String(e.request.url.query().get("status") || "attention");
-  if (["attention", "pending", "pending_device"].indexOf(st) === -1) throw new BadRequestError("Unknown status.");
-  const rows = app.findRecordsByFilter("playlist_syncs", "status = {:s}", "-updated", 50, 0, { s: st });
+  if (["attention", "pending", "pending_device", "review"].indexOf(st) === -1) throw new BadRequestError("Unknown status.");
+  const rows = st === "review"
+    ? app.findRecordsByFilter("playlist_syncs", "needs_review = true && status != 'cancelled'", "-updated", 50, 0)
+    : app.findRecordsByFilter("playlist_syncs", "status = {:s}", "-updated", 50, 0, { s: st });
   const posts = {};
   const ids = rows.map((r) => r.getString("post")).filter((id, i, a) => a.indexOf(id) === i);
   if (ids.length) app.findRecordsByIds("posts", ids).forEach((p) => { if (p) posts[p.id] = p; });
@@ -236,6 +241,18 @@ function listSyncs(app, e) {
           reasons: (x.reasons || []).slice(0, 6),
         })),
         want_duration_ms: ev.want ? Number(ev.want.duration_ms) || 0 : 0,
+        needs_review: r.getBool("needs_review"),
+        target_url: r.getString("target_url"),
+        picked: ev.picked ? {
+          title: String(ev.picked.title || "").slice(0, 200),
+          artists: (ev.picked.artists || []).slice(0, 4).map((a) => String(a).slice(0, 100)),
+          duration_ms: Number(ev.picked.duration_ms) || 0,
+        } : null,
+        guess: ev.guess ? {
+          confidence: ev.guess.confidence === "likely" ? "likely" : "unsure",
+          score: Number(ev.guess.score) || 0,
+          notes: (ev.guess.notes || []).slice(0, 6).map((n) => String(n).slice(0, 200)),
+        } : null,
         post: p ? {
           id: p.id,
           title: p.getString("title"),
@@ -269,6 +286,7 @@ function retry(app, id) {
       r.set("target_id", "");
       r.set("target_url", "");
       r.set("match_basis", "");
+      r.set("needs_review", false);
     }
     const apple = r.getString("target") === "apple_music";
     r.set("status", apple && keep && r.getString("target_id") ? "pending_device" : "pending");
@@ -282,7 +300,26 @@ function retry(app, id) {
   return out;
 }
 
+// POST /api/cymbal/owner/syncs/{id}/confirm — the owner checked a guess and it's right.
+function confirm(app, id) {
+  if (!/^[a-z0-9]{15}$/.test(String(id || ""))) throw new NotFoundError("No such sync.");
+  let out = null;
+  app.runInTransaction((tx) => {
+    const r = util().findOne(tx, "playlist_syncs", "id = {:id}", { id: id });
+    if (!r) throw new NotFoundError("No such sync.");
+    if (!r.getBool("needs_review")) throw new BadRequestError("That one isn't waiting for a check.");
+    r.set("needs_review", false);
+    if (!r.getString("detail")) r.set("detail", "Best guess, checked by the owner.");
+    tx.save(r);
+    out = { ok: true };
+  });
+  return out;
+}
+
 // POST /api/cymbal/owner/syncs/{id}/override {url} — the owner names the exact item.
+// A guess that already reached the playlist can be replaced too: the right item is
+// queued, and the reply names the wrong one, which the owner removes by hand
+// (Cymbal never removes anything from a playlist).
 function override(app, id, rawUrl) {
   const u = util();
   if (!/^[a-z0-9]{15}$/.test(String(id || ""))) throw new NotFoundError("No such sync.");
@@ -297,9 +334,17 @@ function override(app, id, rawUrl) {
       throw new BadRequestError("That's " + u.LABELS[parsed.provider] + " link; this one needs " + u.LABELS[target] + ".");
     }
     const st = r.getString("status");
-    if (st === "synced") throw new BadRequestError("That's already on the playlist, and playlists are append-only.");
+    const wrongGuess = st === "synced" && r.getBool("needs_review");
+    if (st === "synced" && !wrongGuess) throw new BadRequestError("That's already on the playlist, and playlists are append-only.");
     if (st === "cancelled") throw new BadRequestError("That post was removed.");
     if (leased(r)) throw new BadRequestError("That one is being worked on right now. Try again in a minute.");
+    let remove = "";
+    if (wrongGuess && r.getString("target_id") !== parsed.id) {
+      remove = r.getString("target_url");
+      // The owner is removing it from the playlist, so a later post of that song may add it again.
+      tx.findRecordsByFilter("playlist_memberships", "sync = {:s} && item_id = {:i}", "", 10, 0,
+        { s: r.id, i: r.getString("target_id") }).forEach((m) => tx.delete(m));
+    }
     r.set("target_id", parsed.id);
     r.set("target_url", urls().trackUrl(target, parsed.id, parsed.storefront));
     r.set("match_basis", "manual");
@@ -307,11 +352,13 @@ function override(app, id, rawUrl) {
     r.set("attempts", 0);
     r.set("next_at", u.pbTime(Date.now()));
     r.set("needs_verify", false);
+    r.set("needs_review", false);
+    r.set("synced_at", "");
     r.set("reason", "");
     r.set("detail", "Exact link supplied by the owner.");
     r.set("evidence", { manual: true, url: parsed.canonicalUrl });
     tx.save(r);
-    out = { ok: true, status: r.getString("status") };
+    out = { ok: true, status: r.getString("status"), remove_url: remove };
   });
   return out;
 }
@@ -363,6 +410,7 @@ module.exports = {
   disconnect: disconnect,
   listSyncs: listSyncs,
   retry: retry,
+  confirm: confirm,
   override: override,
   appleConfig: appleConfig,
   applePlaylist: applePlaylist,

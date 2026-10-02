@@ -1,12 +1,16 @@
 /*
- * lib/match.js — whether a candidate is the SAME recording as a post. Nothing else.
+ * lib/match.js — whether a candidate is the SAME recording as a post, and, failing
+ * that, which candidate is the best guess.
  *
- * Pure: the provider adapters fetch candidates, this module decides. It never
- * guesses. A candidate must agree on title, artist, version qualifiers and duration,
- * and the agreeing candidates must collapse to exactly one recording — otherwise the
- * answer is "no match" and a person repairs it with an exact link. There are no fuzzy
- * scores, no embeddings and no model here, on purpose: a wrong song silently added to
- * three playlists is worse than a visible "attention".
+ * Pure: the provider adapters fetch candidates, this module decides. decide() is the
+ * strict test: a candidate must agree on title, artist, version qualifiers and
+ * duration, and the agreeing candidates must collapse to exactly one recording.
+ *
+ * bestGuess() is the fallback when decide() finds nothing or too much. It scores every
+ * candidate the steps saw on title, artist, duration, version and (for YouTube) channel,
+ * and picks the highest above a floor. A guess still refuses a different KIND of
+ * recording (live, remix, cover, sped up, ...) or a different artist: those are other
+ * songs, not near misses. Every guess is flagged for the owner to check.
  *
  * Qualifiers (live, remix, remaster, acoustic, cover, sped up, slowed, ...) are part of
  * what a recording IS and must match exactly. Presentation noise ("official video",
@@ -370,7 +374,152 @@ function searchTerms(source) {
   };
 }
 
+// ── best guess ──────────────────────────────────────────────────────────────
+
+// A different one of these is a different recording, so a guess never crosses them.
+// The rest (remaster, radio edit, extended, mono, a named version) are near enough.
+const HARD_QUALIFIERS = ["live", "remix", "cover", "sped_up", "slowed", "reverb", "acoustic", "unplugged",
+  "instrumental", "acapella", "karaoke", "demo", "orchestral"];
+const GUESS_FLOOR = 0.6;
+const LIKELY = 0.9;
+
+// The title with every bracket and dash segment removed: "Idontknow (Oona Video)" and
+// "Idontknow" share the core "idontknow".
+function coreTitle(raw) {
+  const t = String(raw == null ? "" : raw)
+    .replace(/[\(\[\{\uff08\u3010][^\)\]\}\uff09\u3011]*[\)\]\}\uff09\u3011]/g, " ")
+    .split(/\s+[-\u2013\u2014|]\s+|\s+\/\/\s+/)[0]
+    .replace(/\s+(feat\.?|ft\.?|featuring)\s+.*$/i, "");
+  return normalize(t);
+}
+
+function titleScore(wantRaw, want, gotRaw, got) {
+  if (want.base && got.base === want.base) return 1;
+  const a = coreTitle(wantRaw);
+  const b = coreTitle(gotRaw);
+  if (a && a === b) return 0.85;
+  const wa = (want.base || a).split(" ").filter(Boolean);
+  const wb = (got.base || b).split(" ").filter(Boolean);
+  if (!wa.length || !wb.length) return 0;
+  const inter = wa.filter((w, i) => wa.indexOf(w) === i && wb.indexOf(w) !== -1).length;
+  const union = wa.concat(wb).filter((w, i, all) => all.indexOf(w) === i).length;
+  return 0.75 * inter / union;
+}
+
+function artistScore(source, c) {
+  if (artistsAgree(source.artists, c.artists)) return 1;
+  const an = artistNames(source.artists).names;
+  const bn = artistNames(c.artists).names;
+  const shared = an.some((x) => bn.some((y) => x === y || compact(x) === compact(y)));
+  if (shared) return 0.75;
+  // A YouTube upload whose artist we only know from its channel can still name the
+  // artist in its title: "Jamie xx - Idontknow" on someone else's channel.
+  const primary = artistNames(source.artists).primary;
+  if (primary && c.provider === "youtube" && compact(normalize(c.title)).indexOf(compact(primary)) !== -1) return 0.6;
+  return 0;
+}
+
+function durationScore(a, b, tol) {
+  const x = Number(a);
+  const y = Number(b);
+  if (!(x > 0) || !(y > 0)) return 0.6;
+  const d = Math.abs(x - y);
+  if (d <= tol) return 1;
+  if (d <= 15000) return 0.85;
+  if (d <= 30000) return 0.7;
+  if (d <= 60000) return 0.4;
+  return 0.1;
+}
+
+function playable(c) {
+  return c.privacy === "public" && c.uploadStatus === "processed" && !c.live;
+}
+
+function mmss(ms) {
+  const t = Math.round(Number(ms) / 1000);
+  return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0");
+}
+
+// bestGuess(source, candidates, {target}) -> {candidate, score, confidence, notes[]} | null
+function bestGuess(source, candidates, opts) {
+  const target = opts.target;
+  const tol = toleranceFor(source.provider, target);
+  const want = parseTitle(source.title);
+  const srcIsrc = isrcKey(source.isrc);
+  const scored = [];
+  const seen = {};
+
+  (candidates || []).forEach((c, order) => {
+    if (!c || !c.id || seen[c.id]) return;
+    seen[c.id] = true;
+    const got = parseTitle(c.title);
+    const notes = [];
+
+    const hardA = want.qualifiers.filter((q) => HARD_QUALIFIERS.indexOf(q) !== -1);
+    const hardB = got.qualifiers.filter((q) => HARD_QUALIFIERS.indexOf(q) !== -1);
+    if (!sameList(hardA, hardB)) return;
+    let version = 1;
+    if (!sameList(got.qualifiers, want.qualifiers)) {
+      version = 0.5;
+      notes.push("version (" + (got.qualifiers.join(", ") || "plain") + " vs " + (want.qualifiers.join(", ") || "plain") + ")");
+    }
+
+    const title = titleScore(source.title, want, c.title, got);
+    if (title < 0.5) return;
+    if (title < 1) notes.push("title (\u201c" + c.title + "\u201d)");
+
+    const artist = artistScore(source, c);
+    if (!artist) return;
+    if (artist < 1) notes.push("artist (" + (c.artists || []).join(", ") + ")");
+
+    const duration = durationScore(source.durationMs, c.durationMs, tol);
+    if (duration < 1) {
+      notes.push(c.durationMs > 0 && source.durationMs > 0
+        ? "length (" + mmss(c.durationMs) + " vs " + mmss(source.durationMs) + ")" : "length unknown");
+    }
+
+    let score = 0.35 * title + 0.3 * artist + 0.2 * duration + 0.15 * version;
+    if (target === "youtube") {
+      if (!playable(c)) return;
+      const tier = youtubeTier(c, source.artists);
+      score *= tier === 1 ? 1 : tier === 2 ? 0.97 : tier === 3 ? 0.93 : 0.85;
+      if (!tier) notes.push("channel (" + (c.channel || "unknown") + ")");
+    }
+    if (srcIsrc && c.isrc && c.isrc === srcIsrc) score = Math.min(1, score + 0.1);
+    scored.push({ c: c, score: score, notes: notes, order: order });
+  });
+
+  scored.sort((x, y) => {
+    if (Math.abs(x.score - y.score) > 1e-9) return y.score - x.score;
+    if (target !== "youtube") {
+      const rx = ALBUM_RANK[x.c.albumType] === undefined ? 3 : ALBUM_RANK[x.c.albumType];
+      const ry = ALBUM_RANK[y.c.albumType] === undefined ? 3 : ALBUM_RANK[y.c.albumType];
+      if (rx !== ry) return rx - ry;
+      const dx = x.c.releaseDate || "9999";
+      const dy = y.c.releaseDate || "9999";
+      if (dx !== dy) return dx < dy ? -1 : 1;
+    }
+    return x.order - y.order;
+  });
+  const top = scored[0];
+  if (!top || top.score < GUESS_FLOOR) return null;
+  const notes = top.notes.slice();
+  // The same recording on another release (album and single) is not a rival.
+  // Two different ISRCs are two recordings, however alike they look.
+  const same = (a, b) => (a.isrc && b.isrc) ? a.isrc === b.isrc :
+    (normalize(a.title) === normalize(b.title) && artistsAgree(a.artists, b.artists) && durationAgrees(a.durationMs, b.durationMs, 1000));
+  const rivals = scored.filter((s) => s !== top && top.score - s.score < 0.05 && !same(s.c, top.c)).length;
+  if (rivals) notes.push(rivals + " other close candidate" + (rivals > 1 ? "s" : ""));
+  return {
+    candidate: top.c,
+    score: Math.round(top.score * 100) / 100,
+    confidence: top.score >= LIKELY && !rivals ? "likely" : "unsure",
+    notes: notes,
+  };
+}
+
 module.exports = {
+  bestGuess: bestGuess,
   normalize: normalize,
   parseTitle: parseTitle,
   artistsAgree: artistsAgree,

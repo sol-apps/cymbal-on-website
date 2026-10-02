@@ -488,28 +488,40 @@ test("an Apple Music post of the same song is queued for the device and deduplic
   assert.equal(a.youtube.fJ9rUzIMcZQ, 1);
 });
 
-test("ambiguous matches are never guessed, and the owner repairs them with an exact link", async () => {
+test("an ambiguous match becomes a flagged guess, and the owner checks or replaces it", async () => {
   const p = await share("ann", spUrl(SP.echo));
   P.four = p.id;
   const all = await drain(p.id);
   assert.equal(all.spotify.status, "synced");
-  assert.equal(all.apple_music.status, "attention");
-  assert.equal(all.apple_music.reason, "ambiguous");
-  assert.equal(all.youtube.status, "attention");
+  assert.equal(all.spotify.needs_review, false);
+  assert.equal(all.apple_music.status, "pending_device");
+  assert.equal(all.apple_music.match_basis, "guess");
+  assert.equal(all.apple_music.needs_review, true);
+  assert.equal(all.apple_music.target_id, "1000000001", "the first of two equal candidates");
+  assert.equal(all.apple_music.evidence.guess.instead_of, "ambiguous");
+  assert.equal(all.youtube.status, "attention", "nothing to guess from: the search found nothing");
   assert.equal(all.youtube.reason, "no_match");
-  const attn = await as("owner").get("/api/cymbal/owner/syncs?status=attention");
-  assert.ok(attn.json.syncs.some((s) => s.id === all.apple_music.id && s.post && s.post.title === "Echo Chamber"));
-  const friend = (await call("GET", "/api/cymbal/feed")).json.posts.find((x) => x.id === p.id);
-  assert.equal(friend.sync.apple_music.state, "attention");
+
+  const review = await as("owner").get("/api/cymbal/owner/syncs?status=review");
+  const item = review.json.syncs.find((s) => s.id === all.apple_music.id);
+  assert.ok(item, review.text);
+  assert.equal(item.guess.confidence, "unsure");
+  assert.equal(item.picked.title, "Echo Chamber");
+  assert.equal((await call("POST", "/api/cymbal/owner/syncs/" + all.apple_music.id + "/confirm", { token: U.member.token })).status, 403);
+
   const wrong = await as("owner").post("/api/cymbal/owner/syncs/" + all.apple_music.id + "/override", { url: "https://youtu.be/dQw4w9WgXcQ" });
   assert.equal(wrong.status, 400);
-  assert.equal((await call("POST", "/api/cymbal/owner/syncs/" + all.apple_music.id + "/override", { token: U.member.token, body: { url: "https://music.apple.com/gb/song/x/1000000001" } })).status, 403);
-  const fix = await as("owner").post("/api/cymbal/owner/syncs/" + all.apple_music.id + "/override", { url: "https://music.apple.com/gb/song/echo-chamber/1000000001" });
+  assert.equal((await call("POST", "/api/cymbal/owner/syncs/" + all.apple_music.id + "/override", { token: U.member.token, body: { url: "https://music.apple.com/gb/song/x/1000000002" } })).status, 403);
+  const fix = await as("owner").post("/api/cymbal/owner/syncs/" + all.apple_music.id + "/override", { url: "https://music.apple.com/gb/song/echo-chamber/1000000002" });
   assert.equal(fix.status, 200, fix.text);
   const after = await rows(p.id);
   assert.equal(after.apple_music.status, "pending_device");
-  assert.equal(after.apple_music.target_id, "1000000001");
+  assert.equal(after.apple_music.target_id, "1000000002");
   assert.equal(after.apple_music.match_basis, "manual");
+  assert.equal(after.apple_music.needs_review, false);
+  const again = await as("owner").get("/api/cymbal/owner/syncs?status=review");
+  assert.ok(!again.json.syncs.some((s) => s.id === all.apple_music.id));
+  assert.equal((await as("owner").post("/api/cymbal/owner/syncs/" + all.apple_music.id + "/confirm", {})).status, 400);
 });
 
 test("a live recording never matches the studio one", async () => {
@@ -627,9 +639,9 @@ test("Apple: claims are leased, stale leases are ignored, completion records mem
 });
 
 test("deleting a post mid-flight: cancelled if not added, synced if it really was", async () => {
-  const a = await share("eve", "https://music.apple.com/gb/song/echo-chamber/1000000002");
+  const a = await share("eve", "https://music.apple.com/gb/song/echo-chamber/1000000001");
   const claim = await as("owner").post("/api/cymbal/owner/apple/claim", { max: 25 });
-  const item = claim.json.items.find((i) => i.catalog_id === "1000000002");
+  const item = claim.json.items.find((i) => i.catalog_id === "1000000001");
   assert.ok(item);
   assert.equal((await as("eve").del("/api/cymbal/posts/" + a.id)).status, 200);
   assert.equal((await rows(a.id)).apple_music.status, "cancelled");

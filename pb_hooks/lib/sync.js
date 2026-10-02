@@ -8,8 +8,9 @@
  *   lease       a row is claimed in a transaction (lease_token + lease_until) before
  *               any work; a result is only written back by the holder of the lease.
  *   match       fixed order: the exact source item, a unique ISRC match, a unique
- *               MusicBrainz relationship, a unique exact-metadata match. Nothing
- *               fuzzy; lib/match.js decides.
+ *               MusicBrainz relationship, a unique exact-metadata match. Failing
+ *               those, the best guess among every candidate seen, added anyway and
+ *               flagged needs_review for the owner to check. lib/match.js decides.
  *   dedupe      playlist_memberships has one row per (provider, playlist, item). A
  *               second post of the same song finds it and adds nothing.
  *   crash-safe  needs_verify is set BEFORE a write and cleared after. If the process
@@ -143,7 +144,7 @@ function linkedIds(recording, target) {
   return out.slice(0, 5);
 }
 
-function viaMusicBrainz(app, target, source) {
+function viaMusicBrainz(app, target, source, pool) {
   const P = providers();
   const M = match();
   const recs = P.musicbrainz.recordingsForUrl(source.url);
@@ -158,26 +159,32 @@ function viaMusicBrainz(app, target, source) {
     if (target === "youtube") cands = P.youtube.videos(app, ids);
     else if (target === "spotify") ids.forEach((id) => { const c = P.spotify.track(id); if (c) cands.push(c); });
     else ids.forEach((id) => { const c = P.apple.song(id); if (c) cands.push(c); });
+    cands.forEach((c) => pool.push(c));
     const r = M.decide(src, cands, { target: target });
     if (r.matched) return { outcome: "matched", result: r };
   }
   if (target !== "youtube" && rec.isrcs.length) {
     let cands = [];
     rec.isrcs.slice(0, 3).forEach((isrc) => { cands = cands.concat(candidatesByIsrc(app, target, isrc)); });
+    cands.forEach((c) => pool.push(c));
     const r = M.decide(src, cands, { target: target });
     return { outcome: r.matched ? "matched" : r.reason, result: r };
   }
   return { outcome: "no_match" };
 }
 
-// -> {basis, result, steps} on a match, or {basis:"", reason, result, steps}.
+// -> {basis, result, steps} on a match (basis "guess" with result.guess when only the
+// fallback found one), or {basis:"", reason, result, steps}.
 function findTarget(app, target, source) {
   const M = match();
   const steps = {};
+  const pool = [];
   let last = null;
 
   if (source.isrc && target !== "youtube") {
-    const r = M.decide(source, candidatesByIsrc(app, target, source.isrc), { target: target, isrc: source.isrc });
+    const byIsrc = candidatesByIsrc(app, target, source.isrc);
+    byIsrc.forEach((c) => pool.push(c));
+    const r = M.decide(source, byIsrc, { target: target, isrc: source.isrc });
     steps.isrc = r.matched ? "matched" : r.reason;
     last = r;
     if (r.matched) return { basis: "isrc", result: r, steps: steps };
@@ -185,7 +192,7 @@ function findTarget(app, target, source) {
 
   // MusicBrainz is a helper, not a dependency: its outage skips this step.
   try {
-    const mb = viaMusicBrainz(app, target, source);
+    const mb = viaMusicBrainz(app, target, source, pool);
     steps.musicbrainz = mb.outcome;
     if (mb.result) last = mb.result;
     if (mb.outcome === "matched") return { basis: "musicbrainz", result: mb.result, steps: steps };
@@ -194,13 +201,26 @@ function findTarget(app, target, source) {
     steps.musicbrainz = "skipped (" + err.kind + ")";
   }
 
-  const r = M.decide(source, searchCandidates(app, target, source), { target: target });
+  const searched = searchCandidates(app, target, source);
+  searched.forEach((c) => pool.push(c));
+  const r = M.decide(source, searched, { target: target });
   steps.metadata = r.matched ? "matched" : r.reason;
   if (r.matched) return { basis: "metadata", result: r, steps: steps };
   last = r;
 
   const ambiguous = Object.keys(steps).some((k) => steps[k] === "ambiguous");
-  return { basis: "", reason: ambiguous ? "ambiguous" : "no_match", result: last, steps: steps };
+  const reason = ambiguous ? "ambiguous" : "no_match";
+  // Something beats nothing: the closest candidate any step saw, flagged for the owner.
+  const g = M.bestGuess(source, pool, { target: target });
+  if (g) {
+    steps.guess = g.confidence;
+    const c = g.candidate;
+    last.candidate = c;
+    last.guess = { score: g.score, confidence: g.confidence, notes: g.notes, instead_of: reason };
+    last.evidence.picked = { id: c.id, title: c.title, artists: c.artists, duration_ms: c.durationMs, isrc: c.isrc || "" };
+    return { basis: "guess", result: last, steps: steps };
+  }
+  return { basis: "", reason: reason, result: last, steps: steps };
 }
 
 // ── leases ──────────────────────────────────────────────────────────────────
@@ -398,6 +418,7 @@ function processRow(app, rowId, token) {
       picked: found.result ? found.result.evidence.picked || null : null,
       rejected: found.result ? found.result.evidence.rejected : [],
       ambiguous: found.result ? found.result.evidence.ambiguous || [] : [],
+      guess: found.result ? found.result.guess || null : null,
     };
     if (!found.basis) {
       return finish(app, rowId, token, { status: "attention", reason: found.reason, detail: HUMAN[found.reason], evidence: evidence });
@@ -408,6 +429,7 @@ function processRow(app, rowId, token) {
       target_url: c.url || U.trackUrl(target, c.id),
       match_basis: found.basis,
       evidence: evidence,
+      needs_review: found.basis === "guess",
     });
     row = app.findRecordById("playlist_syncs", rowId);
   }
