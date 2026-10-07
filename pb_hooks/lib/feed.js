@@ -67,6 +67,7 @@ function postView(rec, syncs, keyHash, owner) {
     source: source,
     source_label: u.LABELS[source] || source,
     url: rec.getString("canonical_url"),
+    embed_id: rec.getString("embed_id"),
     caption: rec.getString("caption"),
     poster: rec.getString("pseudonym") || "someone",
     mine: mine,

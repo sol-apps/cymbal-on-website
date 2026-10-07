@@ -13,6 +13,8 @@ https://cymbal-on-website.solhann.net
 
 ## How a post reaches three playlists
 
+- Friends can post Spotify, Apple Music, YouTube or Bandcamp links. Bandcamp has no
+  playlists, so a Bandcamp post goes on the other three like any other song.
 - Whatever link someone posts is kept as is.
 - Every minute, a background job looks the song up and finds it on the other two
   services: first by ISRC, then MusicBrainz, then an exact title/artist/version/length match.

@@ -3,7 +3,7 @@
 
 Paths are prefixed with the lib/util.js BASES key they replace:
   /spotify_api  /spotify_accounts  /youtube_api  /google_token  /google_auth
-  /apple_api    /musicbrainz       /itunes
+  /apple_api    /musicbrainz       /itunes        /bandcamp/<artist subdomain>
 Only a PocketBase in LOCAL identity mode with CYMBAL_MOCK_BASE set is sent here.
 
 Test control:
@@ -56,6 +56,15 @@ YOUTUBE = {
                     "licensed": True, "description": "", "key": "rate song"},
     "quotaVideo1": {"title": "Limit - Quota Song", "channel": "Limit", "duration": "PT3M5S",
                     "licensed": True, "description": "", "key": "quota song"},
+}
+
+# Bandcamp track pages, keyed "subdomain/slug": just the parts of the page Cymbal reads.
+BANDCAMP = {
+    "rickastley/never-gonna-give-you-up": {"name": "Never Gonna Give You Up", "artist": "Rick Astley",
+                                           "duration": "P00H03M34S", "track_id": 2718281828},
+    # No JSON-LD: only the Open Graph title and the page properties, as older pages have.
+    "queen/bohemian-rhapsody": {"og_only": True, "name": "Bohemian Rhapsody", "artist": "Queen & Friends",
+                                "track_id": 3141592653},
 }
 
 MB_URLS = {"https://www.youtube.com/watch?v=dQw4w9WgXcQ": ["mbid-rick"]}
@@ -328,6 +337,29 @@ class Handler(BaseHTTPRequestHandler):
         return self.reply(200, {"resultCount": 1, "results": [{"wrapperType": "track", "trackId": int(sid),
                                                                "trackName": s["name"], "artistName": s["artistName"],
                                                                "trackTimeMillis": s["durationInMillis"]}]})
+
+    # ── Bandcamp ───────────────────────────────────────────────────────────
+    def svc_bandcamp(self, method, rest, q, raw):
+        m = re.match(r"^/([a-z0-9-]+)/track/([a-z0-9-]+)$", rest)
+        t = BANDCAMP.get(m.group(1) + "/" + m.group(2)) if m else None
+        if not t:
+            return self.reply(404, {"error": "Not Found"})
+        if t.get("og_only"):
+            head = ('<meta property="og:title" content="%s, by %s">'
+                    '<meta name="bc-page-properties" content="{&quot;item_type&quot;:&quot;t&quot;,&quot;item_id&quot;:%d}">'
+                    % (t["name"], t["artist"].replace("&", "&amp;"), t["track_id"]))
+        else:
+            ld = {"@context": "https://schema.org", "@type": "MusicRecording", "name": t["name"],
+                  "byArtist": {"@type": "MusicGroup", "name": t["artist"]}, "duration": t["duration"],
+                  "additionalProperty": [{"@type": "PropertyValue", "name": "track_id", "value": t["track_id"]}]}
+            head = '<script type="application/ld+json">\n%s\n</script>' % json.dumps(ld)
+        body = ("<!DOCTYPE html><html><head><title>%s | %s</title>%s</head><body></body></html>"
+                % (t["name"], t["artist"], head)).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     # ── MusicBrainz ────────────────────────────────────────────────────────
     def svc_musicbrainz(self, method, rest, q, raw):

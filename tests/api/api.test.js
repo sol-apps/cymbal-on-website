@@ -115,7 +115,7 @@ async function account(name, role) {
   return { id: c.json.id, token: t.json.token };
 }
 
-test("setup: a superuser, the owner's session, one non-owner session, and six people", async () => {
+test("setup: a superuser, the owner's session, one non-owner session, and seven people", async () => {
   const r = await call("POST", "/api/collections/_superusers/auth-with-password", {
     body: { identity: process.env.SU_EMAIL, password: process.env.SU_PASS },
   });
@@ -125,7 +125,7 @@ test("setup: a superuser, the owner's session, one non-owner session, and six pe
   const member = await account("member", "user");
   U.owner = { name: "Sol", key: newKey(), ip: "198.51.100.1", token: owner.token, id: owner.id };
   U.member = { name: "Mem", key: newKey(), ip: "198.51.100.9", token: member.token, id: member.id };
-  ["ann", "ben", "cat", "dan", "eve"].forEach((n, i) => {
+  ["ann", "ben", "cat", "dan", "eve", "fay"].forEach((n, i) => {
     U[n] = { name: n[0].toUpperCase() + n.slice(1), key: newKey(), ip: "198.51.100." + (2 + i) };
   });
   U.nokey = { ip: "198.51.100.99" };
@@ -214,6 +214,13 @@ test("unsupported and unsafe links are refused before any server fetch", async (
     "https://127.0.0.1:8098/spotify_api/tracks/" + SP.bohemian,
     "http://open.spotify.com/track/" + SP.bohemian,
     "https://spotify.link/abc",
+    "https://someartist.bandcamp.com/album/some-album",
+    "https://someartist.bandcamp.com/",
+    "https://daily.bandcamp.com/track/x",
+    "https://bandcamp.com/track/x",
+    "https://a.b.bandcamp.com/track/x",
+    "https://bandcamp.com.evil.example/track/x",
+    "https://someartist.bandcamp.com:8098/track/x",
     "file:///etc/passwd",
   ]) {
     const r = await as("ann").post("/api/cymbal/posts", { url: bad, name: "Ann", request_id: rid() });
@@ -550,6 +557,36 @@ test("a YouTube post reaches Spotify and Apple through MusicBrainz, politely", a
   assert.ok(mb.length >= 2);
   assert.ok(mb.every((l) => l.ua.startsWith("CymbalOnWebsite/")));
   for (let i = 1; i < mb.length; i++) assert.ok(mb[i].t - mb[i - 1].t >= 1.0, "MusicBrainz calls are at least a second apart");
+});
+
+test("a Bandcamp post reaches all three playlists, and its card gets Bandcamp's player", async () => {
+  const p = await share("fay", "https://rickastley.bandcamp.com/track/never-gonna-give-you-up?from=embed");
+  assert.equal(p.source, "bandcamp");
+  assert.equal(p.source_label, "Bandcamp");
+  assert.equal(p.url, "https://rickastley.bandcamp.com/track/never-gonna-give-you-up");
+  assert.equal(p.title, "Never Gonna Give You Up");
+  assert.equal(p.artist, "Rick Astley");
+  assert.equal(p.duration_ms, 214000);
+  assert.equal(p.embed_id, "2718281828");
+  const all = await drain(p.id);
+  assert.equal(Object.keys(all).length, 3, "Bandcamp is a source, never a playlist");
+  assert.equal(all.spotify.status, "synced");
+  assert.equal(all.spotify.target_id, SP.rick);
+  assert.equal(all.youtube.status, "synced");
+  assert.equal(all.youtube.target_id, "dQw4w9WgXcQ");
+  assert.equal(all.apple_music.status, "pending_device");
+  assert.equal(all.apple_music.target_id, "1558533900");
+  const page = (await mock("/__log")).log.filter((l) => l.path.startsWith("/bandcamp/"));
+  assert.deepEqual(page.map((l) => l.path), ["/bandcamp/rickastley/track/never-gonna-give-you-up"]);
+
+  const old = await share("fay", "https://queen.bandcamp.com/track/bohemian-rhapsody");
+  assert.equal(old.title, "Bohemian Rhapsody", "an older page without JSON-LD still resolves");
+  assert.equal(old.artist, "Queen & Friends");
+  assert.equal(old.embed_id, "3141592653");
+
+  const gone = await share("fay", "https://nobody.bandcamp.com/track/not-a-song");
+  const after = (await call("GET", "/api/cymbal/feed")).json.posts.find((x) => x.id === gone.id);
+  assert.equal(after.unavailable, true, "a missing track page is a failed lookup, not a retry loop");
 });
 
 test("a write that may have failed is verified before it is retried, never repeated", async () => {

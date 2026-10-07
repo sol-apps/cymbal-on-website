@@ -282,6 +282,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .player-spotify iframe { height: 152px; }
 .player-youtube iframe { aspect-ratio: 16 / 9; height: auto; }
 .player-apple iframe { height: 175px; }
+.player-bandcamp iframe { height: 120px; }
 
 .syncs-wait { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 .syncs { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }

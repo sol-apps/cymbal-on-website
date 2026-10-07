@@ -96,3 +96,20 @@ test("apple playlist share link for the owner's fallback", () => {
   assert.equal(urls.parseApplePlaylistUrl("https://music.apple.com/gb/album/x/123").ok, false);
   assert.equal(urls.parseApplePlaylistUrl("https://evil.example/gb/playlist/x/pl.u-AkAmPlyUxX4vN8").ok, false);
 });
+
+test("bandcamp tracks on an artist's subdomain; albums, Bandcamp's own hosts and custom domains refused", () => {
+  const r = accepts("https://someartist.bandcamp.com/track/a-song-2?from=search", "bandcamp", "someartist/a-song-2");
+  assert.equal(r.canonicalUrl, "https://someartist.bandcamp.com/track/a-song-2");
+  accepts("https://SomeArtist.Bandcamp.com/track/A-Song", "bandcamp", "someartist/a-song");
+  assert.equal(urls.trackUrl("bandcamp", "someartist/a-song"), "https://someartist.bandcamp.com/track/a-song");
+  refuses("https://someartist.bandcamp.com/album/an-album", "not_a_song");
+  refuses("https://someartist.bandcamp.com/", "not_a_song");
+  refuses("https://daily.bandcamp.com/track/x", "not_a_song");
+  refuses("https://bandcamp.com/track/x", "unsupported_host");
+  refuses("https://a.b.bandcamp.com/track/x", "unsupported_host");
+  refuses("https://-bad.bandcamp.com/track/x", "unsupported_host");
+  refuses("https://someartist.bandcamp.com/track/bad_slug", "invalid_url");
+  refuses("https://someartist.bandcamp.com/track/" + "a".repeat(101), "invalid_url");
+  refuses("https://music.someartist.com/track/a-song", "unsupported_host");
+  assert.ok(urls.SOURCES.includes("bandcamp") && !urls.PROVIDERS.includes("bandcamp"));
+});

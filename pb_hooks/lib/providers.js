@@ -541,6 +541,30 @@ const itunes = {
   },
 };
 
+// ── Bandcamp (posts only) ───────────────────────────────────────────────────
+// Bandcamp has no public API and no playlists, so it is only ever a source: the
+// worker reads the track's public page for its title, artist and length, then matches
+// those on the three playlist services like any other post.
+
+const bandcamp = {
+  track(id) {
+    const u = util();
+    const at = String(id).indexOf("/");
+    const sub = String(id).slice(0, at);
+    const slug = String(id).slice(at + 1);
+    if (at < 1 || !/^[a-z0-9-]{1,100}$/.test(slug)) throw perr("not_found", "malformed Bandcamp id");
+    const res = call({
+      url: u.bandcampBase(sub) + "/track/" + slug,
+      headers: { "User-Agent": "CymbalOnWebsite/1.0 ( " + u.env("CYMBAL_CONTACT", u.publicUrl()) + " )", "Accept": "text/html" },
+      timeout: 15,
+    });
+    const html = res.body ? toString(res.body) : String(res.raw || "");
+    const t = match().fromBandcampPage(html.slice(0, 2000000), id);
+    if (!t) throw perr("not_found", "bandcamp: no track on that page");
+    return t;
+  },
+};
+
 // ── MusicBrainz ─────────────────────────────────────────────────────────────
 // One request per second per client, with a contactable User-Agent. The worker is the
 // only caller and runs serially; the gap is enforced here as well, across VMs.
@@ -605,6 +629,7 @@ module.exports = {
   youtube: youtube,
   apple: apple,
   itunes: itunes,
+  bandcamp: bandcamp,
   musicbrainz: musicbrainz,
   base64: base64,
   pacificDay: pacificDay,

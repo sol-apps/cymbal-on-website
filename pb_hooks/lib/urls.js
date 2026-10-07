@@ -9,11 +9,19 @@
  * is what makes the lookups that follow safe: the host a hook talks to is always one
  * of ours, never one the caller chose. Short links (spotify.link, apple.co) would
  * need a redirect to resolve, so they are refused with a hint instead of followed.
+ *
+ * Bandcamp is a source only: a friend can post a Bandcamp track and it is matched onto
+ * the three playlists, but Bandcamp has no playlists of its own to add to. Its tracks
+ * live on each artist's own subdomain (artist.bandcamp.com), so that one host is built
+ * from a validated label under bandcamp.com, never taken as typed. Artists' custom
+ * domains are refused: we can't tell them from any other site without fetching.
  */
 
+// The playlist targets. SOURCES adds what can be posted but never written to.
 const PROVIDERS = ["spotify", "apple_music", "youtube"];
+const SOURCES = PROVIDERS.concat(["bandcamp"]);
 
-const LABELS = { spotify: "Spotify", apple_music: "Apple Music", youtube: "YouTube" };
+const LABELS = { spotify: "Spotify", apple_music: "Apple Music", youtube: "YouTube", bandcamp: "Bandcamp" };
 
 const HOSTS = {
   "open.spotify.com": "spotify",
@@ -31,6 +39,12 @@ const SPOTIFY_ID = /^[A-Za-z0-9]{22}$/;
 const APPLE_ID = /^[0-9]{1,15}$/;
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 const STOREFRONT = /^[a-z]{2}$/;
+const BANDCAMP_HOST = /^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\.bandcamp\.com$/;
+const BANDCAMP_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/;
+// Bandcamp's own subdomains, which are never an artist's page.
+const BANDCAMP_RESERVED = ["www", "daily", "blog", "get", "help", "f4", "t4", "s4", "bcbits", "api", "m"];
+
+const HINT = "Paste a Spotify, Apple Music, YouTube or Bandcamp song link.";
 
 function fail(code, message) {
   return { ok: false, code: code, message: message };
@@ -159,6 +173,23 @@ function parseYouTube(host, segs, query) {
   return ok("youtube", id, "https://www.youtube.com/watch?v=" + id);
 }
 
+function parseBandcamp(sub, segs) {
+  if (BANDCAMP_RESERVED.indexOf(sub) !== -1) return fail("not_a_song", "Paste a link to one Bandcamp track.");
+  if (segs.length === 2 && segs[0] === "track") {
+    const slug = segs[1].toLowerCase();
+    if (!BANDCAMP_SLUG.test(slug)) return fail("invalid_url", "That Bandcamp link has a malformed track name.");
+    const id = sub + "/" + slug;
+    return ok("bandcamp", id, bandcampUrl(id));
+  }
+  if (segs[0] === "album") return fail("not_a_song", "That's a Bandcamp album. Open the track and share that instead.");
+  return fail("not_a_song", "Paste a link to one Bandcamp track.");
+}
+
+function bandcampUrl(id) {
+  const at = id.indexOf("/");
+  return "https://" + id.slice(0, at) + ".bandcamp.com/track/" + id.slice(at + 1);
+}
+
 // The one entry point for anything a person pastes: a post, or the owner's exact-link
 // repair. Returns {ok:true, provider, id, canonicalUrl[, storefront]} or
 // {ok:false, code, message}; `message` is safe to show as-is.
@@ -167,18 +198,20 @@ function parseTrackUrl(raw) {
   if (!u) return fail("invalid_url", "That doesn't look like a link.");
   if (u.scheme !== "https") return fail("insecure_url", "Links must start with https://.");
   const host = hostOf(u.authority);
-  if (!host) return fail("unsupported_host", "Paste a Spotify, Apple Music or YouTube song link.");
+  if (!host) return fail("unsupported_host", HINT);
   if (SHORT_HOSTS.indexOf(host) !== -1) {
     return fail("short_link", "Short links aren't accepted. Open it and share the full song link instead.");
   }
-  const provider = HOSTS[host];
-  if (!provider) return fail("unsupported_host", "Paste a Spotify, Apple Music or YouTube song link.");
+  const bc = BANDCAMP_HOST.exec(host);
+  const provider = HOSTS[host] || (bc ? "bandcamp" : "");
+  if (!provider) return fail("unsupported_host", HINT);
   const query = params(u.query);
   if (!query) return fail("invalid_url", "That link's query string is malformed.");
   if (query.repeated) return fail("invalid_url", "That link repeats a parameter, so it's ambiguous.");
   const segs = segments(u.path);
   if (provider === "spotify") return parseSpotify(segs);
   if (provider === "apple_music") return parseApple(segs, query);
+  if (provider === "bandcamp") return parseBandcamp(bc[1], segs);
   return parseYouTube(host, segs, query);
 }
 
@@ -201,11 +234,13 @@ function trackUrl(provider, id, storefront) {
   if (provider === "spotify") return "https://open.spotify.com/track/" + id;
   if (provider === "apple_music") return "https://music.apple.com/" + (storefront || "gb") + "/song/" + id;
   if (provider === "youtube") return "https://www.youtube.com/watch?v=" + id;
+  if (provider === "bandcamp") return bandcampUrl(id);
   return "";
 }
 
 module.exports = {
   PROVIDERS: PROVIDERS,
+  SOURCES: SOURCES,
   LABELS: LABELS,
   parseTrackUrl: parseTrackUrl,
   parseApplePlaylistUrl: parseApplePlaylistUrl,

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://js-cdn.music.apple.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.apple.com; frame-src https://*.apple.com https://open.spotify.com https://www.youtube-nocookie.com; form-action 'self'; base-uri 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://js-cdn.music.apple.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.apple.com; frame-src https://*.apple.com https://open.spotify.com https://www.youtube-nocookie.com https://bandcamp.com; form-action 'self'; base-uri 'none'; object-src 'none'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>Cymbal on Website</title>
   <meta name="description" content="Music sharing forum + playlists">
@@ -38,7 +38,7 @@
       <label for="url" class="label">SHARE A SONG</label>
       <div class="url-field">
         <input id="url" name="url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
-               maxlength="500" placeholder="Paste a Spotify, Apple Music or YouTube link" required aria-describedby="url-kind">
+               maxlength="500" placeholder="Paste a Spotify, Apple Music, YouTube or Bandcamp link" required aria-describedby="url-kind">
         <span id="url-kind" class="url-kind" aria-live="polite"></span>
       </div>
       <div id="composer-more" class="composer-more" hidden>

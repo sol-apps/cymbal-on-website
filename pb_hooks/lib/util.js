@@ -8,7 +8,7 @@
  */
 
 const PROVIDERS = ["spotify", "apple_music", "youtube"];
-const LABELS = { spotify: "Spotify", apple_music: "Apple Music", youtube: "YouTube" };
+const LABELS = { spotify: "Spotify", apple_music: "Apple Music", youtube: "YouTube", bandcamp: "Bandcamp" };
 
 // Control characters other than tab and newline. Built from char codes so the source
 // file itself stays plain ASCII.
@@ -126,6 +126,18 @@ function base(key) {
   return BASES[key];
 }
 
+// A Bandcamp track page lives on the artist's own subdomain, so it has no fixed base.
+// `sub` comes from lib/urls.js and is checked again here: the host is always one
+// label under bandcamp.com.
+function bandcampBase(sub) {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(String(sub))) throw new Error("bad Bandcamp subdomain");
+  if (localMode()) {
+    const mock = $os.getenv("CYMBAL_MOCK_BASE");
+    if (mock) return mock.replace(/\/+$/, "") + "/bandcamp/" + sub;
+  }
+  return "https://" + sub + ".bandcamp.com";
+}
+
 function publicUrl() {
   return env("CYMBAL_PUBLIC_URL", "https://cymbal-on-website.solhann.net").replace(/\/+$/, "");
 }
@@ -181,6 +193,7 @@ module.exports = {
   seal: seal,
   unseal: unseal,
   base: base,
+  bandcampBase: bandcampBase,
   publicUrl: publicUrl,
   storefront: storefront,
   spotifyMarket: spotifyMarket,

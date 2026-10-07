@@ -207,3 +207,27 @@ test("best guess between two equal recordings says so", () => {
   assert.equal(g.confidence, "unsure");
   assert.deepEqual(g.notes, ["1 other close candidate"]);
 });
+
+test("a Bandcamp track page: JSON-LD first, then the Open Graph title and page properties", () => {
+  const ld = '<script type="application/ld+json">' + JSON.stringify({
+    "@type": "MusicRecording", name: "Ash", byArtist: { "@type": "MusicGroup", name: "Body Void" },
+    duration: "P00H07M05S", additionalProperty: [{ name: "track_id", value: 123456 }],
+  }) + "</script>";
+  const a = m.fromBandcampPage("<html><head>" + ld + "</head></html>", "bodyvoid/ash");
+  assert.equal(a.title, "Ash");
+  assert.deepEqual(a.artists, ["Body Void"]);
+  assert.equal(a.durationMs, 425000);
+  assert.equal(a.trackId, "123456");
+  assert.equal(a.url, "https://bodyvoid.bandcamp.com/track/ash");
+
+  const og = '<meta property="og:title" content="Rock &amp; Roll, by Tom, Dick &amp; Harry">' +
+    '<meta name="bc-page-properties" content="{&quot;item_type&quot;:&quot;t&quot;,&quot;item_id&quot;:42}">';
+  const b = m.fromBandcampPage(og, "tdh/rock-roll");
+  assert.equal(b.title, "Rock & Roll");
+  assert.deepEqual(b.artists, ["Tom, Dick & Harry"]);
+  assert.equal(b.durationMs, 0);
+  assert.equal(b.trackId, "42");
+
+  assert.equal(m.fromBandcampPage("<html>nothing here</html>", "x/y"), null);
+  assert.equal(m.toleranceFor("bandcamp", "spotify"), 5000);
+});

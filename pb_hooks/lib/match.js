@@ -170,7 +170,9 @@ function sameList(a, b) {
 }
 
 function toleranceFor(sourceProvider, targetProvider) {
-  return sourceProvider === "youtube" || targetProvider === "youtube" ? 5000 : 3000;
+  // Bandcamp often carries the artist's own master, a second or two off the label's.
+  const loose = ["youtube", "bandcamp"];
+  return loose.indexOf(sourceProvider) !== -1 || loose.indexOf(targetProvider) !== -1 ? 5000 : 3000;
 }
 
 // ── provider resource -> candidate (the shape decide() reads) ────────────────
@@ -212,6 +214,87 @@ function parseIsoDuration(s) {
   const m = String(s || "").match(/^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
   if (!m) return 0;
   return ((Number(m[1] || 0) * 24 + Number(m[2] || 0)) * 3600 + Number(m[3] || 0) * 60 + Number(m[4] || 0)) * 1000;
+}
+
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " " };
+
+function decodeEntities(s) {
+  return String(s || "").replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (all, e) => {
+    if (e.charAt(0) === "#") {
+      const n = e.charAt(1).toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : all;
+    }
+    const v = ENTITIES[e.toLowerCase()];
+    return v === undefined ? all : v;
+  });
+}
+
+function metaContent(html, attr, name) {
+  const re = new RegExp("<meta\\s[^>]*" + attr + "=[\"']" + name.replace(/[.:]/g, "\\$&") + "[\"'][^>]*>", "i");
+  const tag = (html.match(re) || [])[0] || "";
+  const m = tag.match(/\scontent=("([^"]*)"|'([^']*)')/i);
+  return m ? decodeEntities(m[2] !== undefined ? m[2] : m[3]) : "";
+}
+
+// A Bandcamp track page -> a candidate, or null. Bandcamp has no public API; its track
+// pages carry schema.org JSON-LD (name, byArtist, duration), with the Open Graph tags
+// as a fallback. `trackId` is Bandcamp's numeric id, which only its embed player needs.
+function fromBandcampPage(html, id) {
+  const page = String(html || "");
+  let ld = null;
+  const scripts = page.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
+  for (let i = 0; i < scripts.length && !ld; i++) {
+    try {
+      const j = JSON.parse(scripts[i].replace(/^<script[^>]*>/i, "").replace(/<\/script>$/i, ""));
+      if (j && j["@type"] === "MusicRecording") ld = j;
+    } catch (_) { /* not ours */ }
+  }
+  let title = "";
+  let artist = "";
+  let durationMs = 0;
+  let trackId = "";
+  if (ld) {
+    title = String(ld.name || "");
+    const by = Array.isArray(ld.byArtist) ? ld.byArtist[0] : ld.byArtist;
+    artist = String((by && by.name) || "");
+    durationMs = parseIsoDuration(ld.duration);
+    (Array.isArray(ld.additionalProperty) ? ld.additionalProperty : []).forEach((p) => {
+      if (p && p.name === "track_id" && /^[0-9]{1,15}$/.test(String(p.value))) trackId = String(p.value);
+    });
+  }
+  if (!title || !artist) {
+    // "Song, by Artist"
+    const og = metaContent(page, "property", "og:title");
+    const at = og.lastIndexOf(", by ");
+    if (at > 0) {
+      title = title || og.slice(0, at);
+      artist = artist || og.slice(at + 5);
+    }
+  }
+  if (!trackId) {
+    try {
+      const props = JSON.parse(metaContent(page, "name", "bc-page-properties") || "{}");
+      if (props.item_type === "t" && /^[0-9]{1,15}$/.test(String(props.item_id))) trackId = String(props.item_id);
+    } catch (_) { /* absent */ }
+  }
+  if (!trackId) {
+    const m = metaContent(page, "property", "og:video").match(/\/track=([0-9]{1,15})\//);
+    if (m) trackId = m[1];
+  }
+  title = decodeEntities(title).trim();
+  artist = decodeEntities(artist).trim();
+  if (!title || !artist) return null;
+  const at = String(id).indexOf("/");
+  return {
+    provider: "bandcamp",
+    id: String(id),
+    title: title,
+    artists: [artist],
+    durationMs: durationMs,
+    isrc: "",
+    trackId: trackId,
+    url: "https://" + String(id).slice(0, at) + ".bandcamp.com/track/" + String(id).slice(at + 1),
+  };
 }
 
 function isTopicChannel(channel) {
@@ -530,6 +613,7 @@ module.exports = {
   parseYouTubeMeta: parseYouTubeMeta,
   fromSpotifyTrack: fromSpotifyTrack,
   fromAppleSong: fromAppleSong,
+  fromBandcampPage: fromBandcampPage,
   fromYouTubeVideo: fromYouTubeVideo,
   youtubeTier: youtubeTier,
   decide: decide,

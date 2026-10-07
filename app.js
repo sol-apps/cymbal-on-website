@@ -19,7 +19,7 @@
 
   const $ = (id) => document.getElementById(id);
   const ORDER = ["spotify", "apple_music", "youtube"];
-  const LABELS = { spotify: "Spotify", apple_music: "Apple Music", youtube: "YouTube" };
+  const LABELS = { spotify: "Spotify", apple_music: "Apple Music", youtube: "YouTube", bandcamp: "Bandcamp" };
   const STATE_TEXT = { pending: "pending", synced: "synced", attention: "attention", cancelled: "cancelled" };
   const STATE_MARK = { pending: "…", synced: "✓", attention: "!", cancelled: "×" };
 
@@ -156,6 +156,7 @@
     if (host === "open.spotify.com" || host === "spotify.link") return "Spotify";
     if (host === "music.apple.com" || host === "itunes.apple.com") return "Apple Music";
     if (/(^|\.)youtube\.com$/.test(host) || host === "youtu.be") return "YouTube";
+    if (/^[a-z0-9-]+\.bandcamp\.com$/.test(host)) return "Bandcamp";
     return "?";
   }
 
@@ -294,8 +295,10 @@
 
   // The embed for a post's own link, built only from the id in a canonical URL the
   // server produced. Every card shows its player, loaded lazily so only the posts
-  // near the screen talk to Spotify, Google or Apple. Nothing autoplays.
-  function embedFor(url) {
+  // near the screen talk to Spotify, Google, Apple or Bandcamp. Nothing autoplays.
+  // Bandcamp's player wants its numeric track id, which the server read from the page.
+  function embedFor(p) {
+    const url = p.url;
     let m;
     if ((m = /^https:\/\/open\.spotify\.com\/track\/([A-Za-z0-9]{22})$/.exec(url))) {
       return { src: "https://open.spotify.com/embed/track/" + m[1], cls: "player-spotify" };
@@ -306,11 +309,14 @@
     if ((m = /^https:\/\/music\.apple\.com\/([a-z]{2})\/song\/([0-9]{1,15})$/.exec(url))) {
       return { src: "https://embed.music.apple.com/" + m[1] + "/song/" + m[2], cls: "player-apple" };
     }
+    if (/^https:\/\/[a-z0-9-]+\.bandcamp\.com\/track\/[a-z0-9-]+$/.test(url) && /^[0-9]{1,15}$/.test(p.embed_id || "")) {
+      return { src: "https://bandcamp.com/EmbeddedPlayer/track=" + p.embed_id + "/size=large/bgcol=ffffff/linkcol=0687f5/tracklist=false/artwork=small/transparent=true/", cls: "player-bandcamp" };
+    }
     return null;
   }
 
   function player(p) {
-    const e = embedFor(p.url);
+    const e = embedFor(p);
     if (!e) return null;
     return h("div", { class: "player " + e.cls },
       h("iframe", {

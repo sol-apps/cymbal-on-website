@@ -50,6 +50,7 @@ function fetchSource(app, post) {
   const sf = post.getString("storefront");
   if (provider === "spotify") return P.spotify.track(id);
   if (provider === "apple_music") return P.apple.configured() ? P.apple.song(id, sf) : P.itunes.lookup(id, sf);
+  if (provider === "bandcamp") return P.bandcamp.track(id);
   const vids = P.youtube.videos(app, [id]);
   if (!vids.length) throw P.perr("not_found", "video not found or not public");
   return vids[0];
@@ -74,6 +75,7 @@ function resolveMeta(app, postId) {
     fresh.set("artist", (src.artists || []).join(", ").slice(0, 300));
     fresh.set("duration_ms", Number(src.durationMs) || 0);
     fresh.set("isrc", src.isrc || "");
+    if (src.trackId) fresh.set("embed_id", String(src.trackId));
     fresh.set("meta_status", "resolved");
   } else {
     const kind = err && err.cymbal ? err.kind : "bug";
