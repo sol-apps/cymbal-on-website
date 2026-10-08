@@ -424,7 +424,7 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   .btn:active { transform: none; }
 }
 
-/* ── stickers (owner only) ─────────────────────────────────────────────── */
+/* ── stickers ──────────────────────────────────────────────────────────── */
 .card { position: relative; }
 .sticker-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .sticker { width: 64px; height: auto; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -433,7 +433,7 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   transform: translate(-50%, -50%) rotate(var(--rot, 0deg));
   filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .25));
 }
-.sticker-placed { pointer-events: auto; cursor: grab; touch-action: none; }
+.sticker-placed.is-mine { pointer-events: auto; cursor: grab; touch-action: none; }
 .sticker-carry { position: fixed; z-index: 1000; pointer-events: none; width: 72px; filter: drop-shadow(4px 6px 2px rgba(0, 0, 0, .3)); }
 .sticker-dock {
   position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 900;

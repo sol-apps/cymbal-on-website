@@ -385,7 +385,7 @@ test("only the writing browser or the owner removes a post or comment", async ()
   assert.ok(Object.values(all).every((r) => r.status === "cancelled" || r.status === "synced"));
 });
 
-test("stickers: only the owner places, moves and removes them, and only the owner sees them", async () => {
+test("stickers: everyone sees them; only the owner places, moves and removes them, one per post", async () => {
   const post = await share("cat", "https://open.spotify.com/track/" + randomSpotifyId(), "stick something on this");
   const path = "/api/cymbal/owner/posts/" + post.id + "/stickers";
   assert.equal((await call("POST", path, { key: U.ann.key, body: { kind: "heart", x: 0.5, y: 10 } })).status, 401, "no session");
@@ -393,34 +393,44 @@ test("stickers: only the owner places, moves and removes them, and only the owne
 
   const heart = await as("owner").post(path, { kind: "heart", x: 0.25, y: 40, rot: -8 });
   assert.equal(heart.status, 200, heart.text);
-  assert.deepEqual(Object.keys(heart.json.sticker).sort(), ["id", "kind", "rot", "x", "y"]);
-  const star = await as("owner").post(path, { kind: "star", x: 7, y: -3, rot: 99 });
-  assert.equal(star.status, 200, star.text);
-  assert.deepEqual([star.json.sticker.x, star.json.sticker.y, star.json.sticker.rot], [1, 0, 30], "clamped onto the card");
+  assert.deepEqual(Object.keys(heart.json.sticker).sort(), ["id", "kind", "mine", "rot", "x", "y"]);
   assert.equal((await as("owner").post(path, { kind: "skull", x: 0.5, y: 1 })).status, 400);
   assert.equal((await as("owner").post(path, { kind: "heart", x: "left", y: 1 })).status, 400);
   assert.equal((await as("owner").post("/api/cymbal/owner/posts/aaaaaaaaaaaaaaa/stickers", { kind: "heart", x: 0, y: 0 })).status, 404);
 
-  const mine = (await as("owner").get("/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
-  assert.deepEqual(mine.stickers.map((s) => s.kind), ["heart", "star"]);
-  for (const who of ["ann", "cat"]) {
-    const r = await as(who).get("/api/cymbal/feed");
-    assert.ok(!r.text.includes('"stickers"'), who + " sees no stickers");
-  }
-  assert.ok(!(await call("GET", "/api/cymbal/feed", { token: U.member.token })).text.includes('"stickers"'), "nor a non-owner session");
+  // One each per post: a second one takes the first one's place.
+  const star = await as("owner").post(path, { kind: "star", x: 7, y: -3, rot: 99 });
+  assert.equal(star.status, 200, star.text);
+  assert.equal(star.json.sticker.id, heart.json.sticker.id, "the same sticker, swapped");
+  assert.deepEqual([star.json.sticker.x, star.json.sticker.y, star.json.sticker.rot], [1, 0, 30], "clamped onto the card");
+  const other = await share("ann", "https://open.spotify.com/track/" + randomSpotifyId(), "and on this");
+  const second = await as("owner").post("/api/cymbal/owner/posts/" + other.id + "/stickers", { kind: "heart", x: 0.5, y: 20 });
+  assert.equal(second.status, 200, second.text);
+  assert.notEqual(second.json.sticker.id, star.json.sticker.id, "another post has its own");
 
-  const moveTo = "/api/cymbal/owner/stickers/" + heart.json.sticker.id + "/move";
+  const mine = (await as("owner").get("/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
+  assert.deepEqual(mine.stickers.map((s) => [s.kind, s.mine]), [["star", true]]);
+  for (const r of [await as("ann").get("/api/cymbal/feed"), await as("cat").get("/api/cymbal/feed"),
+    await call("GET", "/api/cymbal/feed", { token: U.member.token }), await call("GET", "/api/cymbal/feed", {})]) {
+    const seen = r.json.posts.find((p) => p.id === post.id);
+    assert.deepEqual(seen.stickers.map((s) => [s.kind, s.x, s.mine]), [["star", 1, false]], "everyone sees it, nobody else can move it");
+    assert.ok(!r.text.includes("author_key"));
+  }
+
+  const moveTo = "/api/cymbal/owner/stickers/" + star.json.sticker.id + "/move";
   assert.equal((await call("POST", moveTo, { token: U.member.token, body: { x: 0.9, y: 5 } })).status, 403);
+  assert.equal((await call("POST", moveTo, { key: U.ann.key, body: { x: 0.9, y: 5 } })).status, 401);
   const moved = await as("owner").post(moveTo, { x: 0.9, y: 120, rot: 4 });
   assert.equal(moved.status, 200, moved.text);
   assert.deepEqual([moved.json.sticker.x, moved.json.sticker.y, moved.json.sticker.rot], [0.9, 120, 4]);
 
-  const gone = "/api/cymbal/owner/stickers/" + star.json.sticker.id;
+  const gone = "/api/cymbal/owner/stickers/" + second.json.sticker.id;
   assert.equal((await call("DELETE", gone, { token: U.member.token })).status, 403);
   assert.equal((await as("owner").del(gone)).status, 200);
   assert.equal((await as("owner").del(gone)).status, 404);
-  const after = (await as("owner").get("/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
-  assert.deepEqual(after.stickers.map((s) => [s.kind, s.x, s.y]), [["heart", 0.9, 120]]);
+  const after = (await as("owner").get("/api/cymbal/feed")).json.posts;
+  assert.deepEqual(after.find((p) => p.id === post.id).stickers.map((s) => [s.kind, s.x, s.y]), [["star", 0.9, 120]]);
+  assert.deepEqual(after.find((p) => p.id === other.id).stickers, []);
 });
 
 test("clear the stage before providers connect", async () => {

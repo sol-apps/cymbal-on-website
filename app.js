@@ -353,7 +353,7 @@
         p.can_delete ? h("button", { class: "btn-remove", type: "button", onclick: () => removePost(p.id) },
           h("span", { "aria-hidden": "true" }, "✕"), "Remove") : null),
       h("div", { class: "comments", id: "c-" + p.id, hidden: true }),
-      p.stickers ? stickerLayer(p) : null);
+      p.stickers && p.stickers.length ? stickerLayer(p) : null);
     return card;
   }
 
@@ -495,12 +495,12 @@
     return form;
   }
 
-  // ── stickers (owner only, for now) ───────────────────────────────────────
-  // Hand-drawn hearts and stars the owner sticks anywhere on a post. Pick one up from
-  // the dock (or a placed one off its post) and it follows the mouse or finger; let go
-  // over a post to stick it there. Dragging works, and so does tap-then-tap. Letting go
-  // anywhere that isn't a post puts a new sticker back, and takes a placed one off.
-  // The feed only carries stickers for the owner, so nobody else sees them.
+  // ── stickers (everyone sees them; only the owner places them, for now) ───
+  // Hand-drawn hearts and stars stuck anywhere on a post, one each per post. Pick one
+  // up from the dock (or your own off its post) and it follows the mouse or finger; let
+  // go over a post to stick it there, in place of the one you had on it. Dragging
+  // works, and so does tap-then-tap. Letting go anywhere that isn't a post puts a new
+  // sticker back, and takes a placed one off.
 
   const STICKERS = { heart: "A red heart", star: "A silver star" };
   const stickerSrc = (kind) => "stickers/" + kind + ".png";
@@ -520,6 +520,8 @@
     const el = stickerImg(s.kind, "sticker-placed");
     if (s.id) el.dataset.id = s.id;
     pinSticker(el, s);
+    if (!s.mine) return el; // someone else's: look, don't touch
+    el.classList.add("is-mine");
     el.addEventListener("pointerdown", (ev) => {
       if (carry || !el.dataset.id || ev.button > 0) return;
       ev.preventDefault();
@@ -658,8 +660,11 @@
         await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id) + "/move", { method: "POST", body: spot });
         return;
       }
-      const el = placedSticker(postId, spot);
-      layerOf(card).append(el);
+      const layer = layerOf(card);
+      const replaced = [...layer.querySelectorAll(".sticker-placed.is-mine")];
+      replaced.forEach((old) => { old.hidden = true; });
+      const el = placedSticker(postId, Object.assign({ mine: true }, spot));
+      layer.append(el);
       if (from) {
         from.el.remove();
         await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
@@ -667,8 +672,10 @@
       try {
         const res = await api("/api/cymbal/owner/posts/" + encodeURIComponent(postId) + "/stickers", { method: "POST", body: spot });
         el.dataset.id = res.sticker.id;
+        replaced.forEach((old) => old.remove());
       } catch (err) {
         el.remove();
+        replaced.forEach((old) => { old.hidden = false; });
         throw err;
       }
     } catch (err) {

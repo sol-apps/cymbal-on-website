@@ -85,11 +85,10 @@ function views(app, rows, e) {
   const owner = u.isOwner(e);
   const keyHash = u.writerKey(e, false);
   const syncs = syncsByPost(app, rows.map((r) => r.id));
-  // Stickers are the owner's alone for now: nobody else's feed mentions them.
-  const stickers = owner ? require(__hooks + "/lib/stickers.js").byPost(app, rows.map((r) => r.id)) : null;
+  const stickers = require(__hooks + "/lib/stickers.js").byPost(app, rows.map((r) => r.id), owner);
   return rows.map((r) => {
     const v = postView(r, syncs[r.id], keyHash, owner);
-    if (stickers) v.stickers = stickers[r.id] || [];
+    v.stickers = stickers[r.id] || [];
     return v;
   });
 }

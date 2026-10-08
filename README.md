@@ -28,9 +28,10 @@ https://cymbal-on-website.solhann.net
 - Spotify and YouTube update in the background. Apple Music only adds songs while the
   owner has Cymbal open in a browser they've authorised.
 
-## Stickers (owner only, for now)
+## Stickers
 
-When the owner is signed in, a red heart and a silver star sit in the bottom corner.
-Pick one up (drag it, or tap it and then tap where it goes) and let go on a post to
-stick it there. Placed stickers can be picked up again and moved; dropping one
-anywhere off a post takes it off. They're saved per post, and only the owner sees them.
+Everyone sees the stickers on a post. Only the owner can place them, for now: when
+signed in, a red heart and a silver star sit in the bottom corner. Pick one up (drag
+it, or tap it and then tap where it goes) and let go on a post to stick it there.
+It's one sticker each per post, so a second one takes the first one's place. A placed
+sticker can be picked up again and moved; dropping it anywhere off a post takes it off.
