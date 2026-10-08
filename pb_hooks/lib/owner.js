@@ -203,14 +203,17 @@ function disconnect(app, provider) {
 }
 
 // GET /api/cymbal/owner/syncs?status=attention — the detail friends never see.
-// status=review lists the best guesses still waiting for the owner to check.
+// status=review lists the best guesses still waiting for the owner to check;
+// status=dismissed the songs the owner said aren't on a service, to bring back.
 function listSyncs(app, e) {
   const u = util();
   const st = String(e.request.url.query().get("status") || "attention");
-  if (["attention", "pending", "pending_device", "review"].indexOf(st) === -1) throw new BadRequestError("Unknown status.");
+  if (["attention", "pending", "pending_device", "review", "dismissed"].indexOf(st) === -1) throw new BadRequestError("Unknown status.");
   const rows = st === "review"
     ? app.findRecordsByFilter("playlist_syncs", "needs_review = true && status != 'cancelled'", "-updated", 50, 0)
-    : app.findRecordsByFilter("playlist_syncs", "status = {:s}", "-updated", 50, 0, { s: st });
+    : st === "dismissed"
+      ? app.findRecordsByFilter("playlist_syncs", "status = 'cancelled' && reason = 'dismissed'", "-updated", 50, 0)
+      : app.findRecordsByFilter("playlist_syncs", "status = {:s}", "-updated", 50, 0, { s: st });
   const posts = {};
   const ids = rows.map((r) => r.getString("post")).filter((id, i, a) => a.indexOf(id) === i);
   if (ids.length) app.findRecordsByIds("posts", ids).forEach((p) => { if (p) posts[p.id] = p; });
@@ -235,6 +238,7 @@ function listSyncs(app, e) {
         // The nearest candidates and why each was turned down, so a "no match" says
         // whether the search found nothing or found the song and disagreed with it.
         near_misses: (ev.rejected || []).filter((x) => x && x.title).slice(0, 3).map((x) => ({
+          id: String(x.id || ""),
           title: String(x.title).slice(0, 200),
           artists: (x.artists || []).slice(0, 4).map((a) => String(a).slice(0, 100)),
           duration_ms: Number(x.duration_ms) || 0,
@@ -247,6 +251,16 @@ function listSyncs(app, e) {
           title: String(ev.picked.title || "").slice(0, 200),
           artists: (ev.picked.artists || []).slice(0, 4).map((a) => String(a).slice(0, 100)),
           duration_ms: Number(ev.picked.duration_ms) || 0,
+        } : null,
+        // The nearest thing the worker found when nothing was close enough to add.
+        closest: ev.closest && ev.closest.id ? {
+          id: String(ev.closest.id),
+          url: String(ev.closest.url || ""),
+          title: String(ev.closest.title || "").slice(0, 200),
+          artists: (ev.closest.artists || []).slice(0, 4).map((a) => String(a).slice(0, 100)),
+          duration_ms: Number(ev.closest.duration_ms) || 0,
+          score: Number(ev.closest.score) || 0,
+          notes: (ev.closest.notes || []).slice(0, 6).map((n) => String(n).slice(0, 200)),
         } : null,
         guess: ev.guess ? {
           confidence: ev.guess.confidence === "likely" ? "likely" : "unsure",
@@ -278,7 +292,7 @@ function retry(app, id) {
     if (!r) throw new NotFoundError("No such sync.");
     const st = r.getString("status");
     if (st === "synced") throw new BadRequestError("That's already on the playlist.");
-    if (st === "cancelled") throw new BadRequestError("That post was removed.");
+    if (st === "cancelled" && r.getString("reason") !== "dismissed") throw new BadRequestError("That post was removed.");
     if (leased(r)) throw new BadRequestError("That one is being worked on right now.");
     const basis = r.getString("match_basis");
     const keep = basis === "source" || basis === "manual";
@@ -363,6 +377,83 @@ function override(app, id, rawUrl) {
   return out;
 }
 
+// POST /api/cymbal/owner/syncs/{id}/pick {candidate_id?} — the owner takes the closest
+// candidate the worker found, even one below the bar for a guess. Without an id it's
+// the closest; with one it must be a candidate this row's search actually saw.
+function pick(app, id, candidateId) {
+  const u = util();
+  if (!/^[a-z0-9]{15}$/.test(String(id || ""))) throw new NotFoundError("No such sync.");
+  let out = null;
+  app.runInTransaction((tx) => {
+    const r = u.findOne(tx, "playlist_syncs", "id = {:id}", { id: id });
+    if (!r) throw new NotFoundError("No such sync.");
+    const st = r.getString("status");
+    if (st !== "attention") throw new BadRequestError(st === "cancelled" ? "That one was removed or dismissed." : "That one isn't waiting for a match.");
+    if (leased(r)) throw new BadRequestError("That one is being worked on right now. Try again in a minute.");
+    let ev = {};
+    try { ev = JSON.parse(r.getString("evidence") || "{}") || {}; } catch (_) { ev = {}; }
+    const found = [];
+    if (ev.closest && ev.closest.id) found.push(ev.closest);
+    (ev.rejected || []).forEach((x) => { if (x && x.id) found.push(x); });
+    const want = String(candidateId || (found[0] && found[0].id) || "");
+    const choice = found.filter((x) => String(x.id) === want)[0];
+    if (!choice) throw new BadRequestError("There's no candidate to pick for that one. Paste the right link instead.");
+    const target = r.getString("target");
+    r.set("target_id", String(choice.id));
+    r.set("target_url", String(choice.url || urls().trackUrl(target, String(choice.id), u.storefront())));
+    r.set("match_basis", "manual");
+    r.set("status", target === "apple_music" ? "pending_device" : "pending");
+    r.set("attempts", 0);
+    r.set("next_at", u.pbTime(Date.now()));
+    r.set("needs_verify", false);
+    r.set("needs_review", false);
+    r.set("reason", "");
+    r.set("detail", "Closest candidate, picked by the owner.");
+    ev.picked = { id: String(choice.id), title: choice.title || "", artists: choice.artists || [], duration_ms: Number(choice.duration_ms) || 0 };
+    ev.picked_by_owner = true;
+    r.set("evidence", ev);
+    tx.save(r);
+    out = { ok: true, status: r.getString("status") };
+  });
+  return out;
+}
+
+// POST /api/cymbal/owner/syncs/{id}/dismiss — the owner reckons the song isn't on that
+// service at all. The row stops asking; RETRY brings it back. A guess that already
+// reached the playlist is named in the reply, for the owner to remove by hand.
+function dismiss(app, id) {
+  const u = util();
+  if (!/^[a-z0-9]{15}$/.test(String(id || ""))) throw new NotFoundError("No such sync.");
+  let out = null;
+  app.runInTransaction((tx) => {
+    const r = u.findOne(tx, "playlist_syncs", "id = {:id}", { id: id });
+    if (!r) throw new NotFoundError("No such sync.");
+    const st = r.getString("status");
+    const target = r.getString("target");
+    if (st === "cancelled") throw new BadRequestError("That one was already removed or dismissed.");
+    if (st === "synced" && !r.getBool("needs_review")) throw new BadRequestError("That's already on the playlist.");
+    if (leased(r)) throw new BadRequestError("That one is being worked on right now. Try again in a minute.");
+    let remove = "";
+    if (st === "synced") {
+      remove = r.getString("target_url");
+      tx.findRecordsByFilter("playlist_memberships", "sync = {:s} && item_id = {:i}", "", 10, 0,
+        { s: r.id, i: r.getString("target_id") }).forEach((m) => tx.delete(m));
+    }
+    r.set("target_id", "");
+    r.set("target_url", "");
+    r.set("match_basis", "");
+    r.set("status", "cancelled");
+    r.set("needs_verify", false);
+    r.set("needs_review", false);
+    r.set("synced_at", "");
+    r.set("reason", "dismissed");
+    r.set("detail", "Dismissed by the owner: probably not on " + u.LABELS[target] + ".");
+    tx.save(r);
+    out = { ok: true, remove_url: remove };
+  });
+  return out;
+}
+
 // ── Apple: configuration for the owner's browser, and its playlist ──────────
 
 // The developer token is designed to be handed to a browser running MusicKit; it
@@ -412,6 +503,8 @@ module.exports = {
   retry: retry,
   confirm: confirm,
   override: override,
+  pick: pick,
+  dismiss: dismiss,
   appleConfig: appleConfig,
   applePlaylist: applePlaylist,
   appleShareUrl: appleShareUrl,

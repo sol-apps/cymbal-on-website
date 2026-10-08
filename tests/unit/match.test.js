@@ -208,6 +208,57 @@ test("best guess between two equal recordings says so", () => {
   assert.deepEqual(g.notes, ["1 other close candidate"]);
 });
 
+test("artist names written differently still agree", () => {
+  assert.equal(m.artistsAgree(["Florence + The Machine"], ["Florence and the Machine"]), true);
+  assert.equal(m.artistsAgree(["Earth Wind and Fire"], ["Earth, Wind & Fire"]), true);
+  assert.equal(m.artistsAgree(["Guns N' Roses"], ["Guns N Roses"]), true);
+  assert.equal(m.artistsAgree(["Disclosure / Sam Smith"], ["Disclosure"]), true);
+  assert.equal(m.artistsAgree(["Queen"], ["Queens of the Stone Age"]), false);
+});
+
+test("best guess: a near spelling of the artist, or of the title", () => {
+  const src = { provider: "spotify", title: "Praise the Lord (Da Shine)", artists: ["A$AP Rocky"], durationMs: 205000 };
+  const g = m.bestGuess(src, [{ provider: "apple_music", id: "1", title: "Praise the Lord (Da Shine)", artists: ["ASAP Rocky"], durationMs: 205000 }], { target: "apple_music" });
+  assert.equal(g.candidate.id, "1");
+  const t = { provider: "spotify", title: "Idontknow", artists: ["Jamie xx"], durationMs: 322000 };
+  const h = m.bestGuess(t, [{ provider: "apple_music", id: "2", title: "I Don't Know", artists: ["Jamie xx"], durationMs: 322000 }], { target: "apple_music" });
+  assert.equal(h.candidate.id, "2");
+  assert.equal(h.confidence, "likely");
+});
+
+test("best guess: the artist written into a YouTube title on someone else's channel", () => {
+  const src = { provider: "youtube", title: "Midnight City", artists: ["Random Uploads"], durationMs: 243000 };
+  const c = { provider: "spotify", id: "s", title: "Midnight City", artists: ["M83"], durationMs: 243000 };
+  assert.equal(m.bestGuess(src, [c], { target: "spotify" }), null);
+  const named = { provider: "youtube", title: "M83 Midnight City", artists: ["Random Uploads"], durationMs: 243000 };
+  assert.equal(m.bestGuess(named, [c], { target: "spotify" }).candidate.id, "s");
+});
+
+test("length is fuzzy: a longer music video, a long track's drift", () => {
+  const src = { provider: "spotify", title: "Song", artists: ["Band"], durationMs: 200000 };
+  const video = { provider: "youtube", id: "v", title: "Song", artists: ["Band"], durationMs: 236000, channel: "BandVEVO",
+    privacy: "public", uploadStatus: "processed", live: false, categoryId: "10", licensed: true };
+  const g = m.bestGuess(src, [video], { target: "youtube" });
+  assert.equal(g.candidate.id, "v");
+  assert.ok(g.score >= 0.85, "a video 36s longer still scores " + g.score);
+  const long = { provider: "spotify", title: "Epic", artists: ["Band"], durationMs: 600000 };
+  const a = m.bestGuess(long, [{ provider: "apple_music", id: "a", title: "Epic", artists: ["Band"], durationMs: 610000 }], { target: "apple_music" });
+  assert.deepEqual(a.notes, []);
+  assert.equal(a.confidence, "likely");
+});
+
+test("closest: the nearest candidate even below the floor, for the owner to pick", () => {
+  const queen = { provider: "spotify", title: "Under Pressure", artists: ["Queen"], durationMs: 248000 };
+  const far = [{ provider: "apple_music", id: "2", title: "Under Pressure", artists: ["Queen Latifah"], durationMs: 248000 },
+    { provider: "apple_music", id: "3", title: "Under Pressure - Live", artists: ["Queen"], durationMs: 320000 }];
+  assert.equal(m.bestGuess(queen, far, { target: "apple_music" }), null);
+  const c = m.closest(queen, far, { target: "apple_music" });
+  assert.equal(c.candidate.id, "2");
+  assert.ok(c.score <= 0.7);
+  assert.ok(c.notes.some((n) => n.startsWith("artist")));
+  assert.equal(m.closest(queen, [], { target: "apple_music" }), null);
+});
+
 test("a Bandcamp track page: JSON-LD first, then the Open Graph title and page properties", () => {
   const ld = '<script type="application/ld+json">' + JSON.stringify({
     "@type": "MusicRecording", name: "Ash", byArtist: { "@type": "MusicGroup", name: "Body Void" },

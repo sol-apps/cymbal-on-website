@@ -122,9 +122,12 @@ function compact(s) {
   return s.replace(/ /g, "");
 }
 
-// One credit string can hold several names ("A & B", "A, B and C", "A x B"). The
-// primary is the first name of the first credit; `names` holds every whole credit
-// and every name split out of one.
+// One credit string can hold several names ("A & B", "A, B and C", "A x B", "A / B").
+// The primary is the first name of the first credit; `names` holds every whole credit
+// and every name split out of one. Splitting happens on the raw credit, before
+// normalize() turns "/", "+" and ";" into spaces.
+const CREDIT_SPLIT = /\s*(?:[&+\/;,]|\s(?:and|x|vs\.?|feat\.?|ft\.?|featuring|with)\s)\s*/i;
+
 function artistNames(list) {
   const names = [];
   let primary = "";
@@ -132,8 +135,8 @@ function artistNames(list) {
     const k = artistKey(credit);
     if (!k) return;
     if (names.indexOf(k) === -1) names.push(k);
-    k.split(/ and | x | feat | ft | featuring | with |, ?/).forEach((p) => {
-      const q = p.trim().replace(/^the /, "");
+    String(credit).split(CREDIT_SPLIT).forEach((p) => {
+      const q = artistKey(p);
       if (!q) return;
       if (!primary) primary = q;
       if (names.indexOf(q) === -1) names.push(q);
@@ -142,13 +145,45 @@ function artistNames(list) {
   return { primary: primary, names: names };
 }
 
-// Each side's PRIMARY artist must appear among the other side's names.
+// "Florence + The Machine" and "Florence and the Machine", "Guns N' Roses" and "Guns
+// N Roses", "JAY-Z" and "Jay Z" all reduce to one key.
+function looseArtist(k) {
+  return k.replace(/\b(the|and|n)\b/g, " ").replace(/ /g, "");
+}
+
+function sameName(x, y) {
+  return x === y || looseArtist(x) === looseArtist(y);
+}
+
+// Each side's PRIMARY artist must appear among the other side's names, or the whole
+// credits must be the same name written differently.
 function artistsAgree(a, b) {
   const an = artistNames(a);
   const bn = artistNames(b);
   if (!an.primary || !bn.primary) return false;
-  const has = (names, x) => names.some((n) => n === x || compact(n) === compact(x));
+  const whole = (list) => looseArtist((list || []).map(artistKey).join(" "));
+  if (whole(a) && whole(a) === whole(b)) return true;
+  const has = (names, x) => names.some((n) => sameName(n, x));
   return has(bn.names, an.primary) && has(an.names, bn.primary);
+}
+
+// 0..1: how alike two strings are, by edit distance. Long inputs are cut, since
+// titles and names that agree on their first 64 characters agree well enough.
+function similarity(a, b) {
+  const x = String(a).slice(0, 64);
+  const y = String(b).slice(0, 64);
+  if (!x.length || !y.length) return 0;
+  if (x === y) return 1;
+  let prev = [];
+  for (let j = 0; j <= y.length; j++) prev.push(j);
+  for (let i = 1; i <= x.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= y.length; j++) {
+      cur.push(Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (x.charAt(i - 1) === y.charAt(j - 1) ? 0 : 1)));
+    }
+    prev = cur;
+  }
+  return 1 - prev[y.length] / Math.max(x.length, y.length);
 }
 
 function durationAgrees(a, b, tolMs) {
@@ -302,7 +337,8 @@ function isTopicChannel(channel) {
 }
 
 function channelArtist(channel) {
-  return String(channel || "").replace(/ - topic$/i, "").replace(/vevo$/i, "").replace(/\bofficial\b/i, "").trim();
+  return String(channel || "").replace(/ - topic$/i, "").replace(/vevo$/i, "")
+    .replace(/\b(official|music|tv|channel|records)\b/gi, " ").replace(/\s+/g, " ").trim();
 }
 
 // YouTube has no artist field. In order of trust: the auto-generated "Provided to
@@ -476,42 +512,77 @@ function coreTitle(raw) {
   return normalize(t);
 }
 
-function titleScore(wantRaw, want, gotRaw, got) {
+// Every name either side credits, so an artist written into a title can be ignored:
+// "Jamie xx - Idontknow" on a stranger's channel, "Song (Artist)".
+function withoutNames(base, names) {
+  let t = " " + base + " ";
+  names.forEach((n) => { if (n.length >= 3) t = t.split(" " + n + " ").join(" "); });
+  return t.trim().replace(/\s+/g, " ");
+}
+
+function titleScore(wantRaw, want, gotRaw, got, names) {
   if (want.base && got.base === want.base) return 1;
   const a = coreTitle(wantRaw);
   const b = coreTitle(gotRaw);
   if (a && a === b) return 0.85;
-  const wa = (want.base || a).split(" ").filter(Boolean);
-  const wb = (got.base || b).split(" ").filter(Boolean);
-  if (!wa.length || !wb.length) return 0;
+  const x = want.base || a;
+  const y = got.base || b;
+  if (!x || !y) return 0;
+  // "Idontknow" and "I Don't Know"; a typo or a missing word in a long title.
+  const close = compact(x) === compact(y) ? 0.95 : similarity(compact(x), compact(y));
+  const fuzzy = close >= 0.85 ? 0.9 * close : 0;
+  const bare = names && names.length ? [withoutNames(x, names), withoutNames(y, names)] : ["", ""];
+  const stripped = bare[0] && bare[0] === bare[1] ? 0.9 : 0;
+  const wa = x.split(" ").filter(Boolean);
+  const wb = y.split(" ").filter(Boolean);
   const inter = wa.filter((w, i) => wa.indexOf(w) === i && wb.indexOf(w) !== -1).length;
   const union = wa.concat(wb).filter((w, i, all) => all.indexOf(w) === i).length;
-  return 0.75 * inter / union;
+  return Math.max(fuzzy, stripped, 0.75 * inter / union);
 }
 
 function artistScore(source, c) {
   if (artistsAgree(source.artists, c.artists)) return 1;
-  const an = artistNames(source.artists).names;
-  const bn = artistNames(c.artists).names;
-  const shared = an.some((x) => bn.some((y) => x === y || compact(x) === compact(y)));
+  const sa = artistNames(source.artists);
+  const ca = artistNames(c.artists);
+  const shared = sa.names.some((x) => ca.names.some((y) => sameName(x, y)));
   if (shared) return 0.75;
+  // The same name spelt a little differently: "A$AP Rocky" and "ASAP Rocky", a
+  // missing accent or hyphen the normalizer didn't catch. Short names never count:
+  // one letter turns "Queen" into "Queens".
+  let near = 0;
+  sa.names.forEach((x) => ca.names.forEach((y) => {
+    const lx = looseArtist(x);
+    const ly = looseArtist(y);
+    if (Math.min(lx.length, ly.length) < 5) return;
+    const r = similarity(lx, ly);
+    if (r >= 0.85 && r > near) near = r;
+  }));
+  if (near) return 0.85 * near;
   // A YouTube upload whose artist we only know from its channel can still name the
-  // artist in its title: "Jamie xx - Idontknow" on someone else's channel.
-  const primary = artistNames(source.artists).primary;
-  if (primary && c.provider === "youtube" && compact(normalize(c.title)).indexOf(compact(primary)) !== -1) return 0.6;
+  // artist in its title: "Jamie xx - Idontknow" on someone else's channel. Likewise a
+  // YouTube post whose channel isn't the artist's can carry the artist in its title.
+  const inTitle = (title, primary) => primary && primary.length >= 3 &&
+    (" " + normalize(title) + " ").indexOf(" " + primary + " ") !== -1;
+  if (c.provider === "youtube" && inTitle(c.title, sa.primary)) return 0.6;
+  if (source.provider === "youtube" && inTitle(source.title, ca.primary)) return 0.6;
   return 0;
 }
 
-function durationScore(a, b, tol) {
+// Fuzzy on length. Within the pair's tolerance, or 2% of the song (a long track's
+// masters drift further apart), it's the same length; beyond that the score falls
+// away smoothly: about 0.9 at ten seconds over, 0.5 at thirty, 0.2 at a minute. A
+// music video is often longer than the track (an intro, an outro, a skit), so when
+// the YouTube side is the longer one only half the difference counts.
+function durationScore(a, b, tol, videoSide) {
   const x = Number(a);
   const y = Number(b);
   if (!(x > 0) || !(y > 0)) return 0.6;
-  const d = Math.abs(x - y);
-  if (d <= tol) return 1;
-  if (d <= 15000) return 0.85;
-  if (d <= 30000) return 0.7;
-  if (d <= 60000) return 0.4;
-  return 0.1;
+  let d = Math.abs(x - y);
+  if ((videoSide === "a" && x > y) || (videoSide === "b" && y > x)) d = d / 2;
+  const slack = Math.max(tol, 0.02 * Math.max(x, y));
+  if (d <= slack) return 1;
+  const over = (d - slack) / 30000;
+  return Math.max(0.1, 1 / (1 + over * over));
 }
 
 function playable(c) {
@@ -523,39 +594,48 @@ function mmss(ms) {
   return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0");
 }
 
-// bestGuess(source, candidates, {target}) -> {candidate, score, confidence, notes[]} | null
-function bestGuess(source, candidates, opts) {
-  const target = opts.target;
+// Score every candidate. Strict (bestGuess) drops a different kind of recording, a
+// different artist or a different title outright. Loose (closest) keeps them, at a
+// cost, so the owner can still see and pick the nearest thing the search found.
+function scoreAll(source, candidates, target, loose) {
   const tol = toleranceFor(source.provider, target);
   const want = parseTitle(source.title);
   const srcIsrc = isrcKey(source.isrc);
+  const names = artistNames(source.artists).names;
+  const videoSide = target === "youtube" ? "b" : (source.provider === "youtube" ? "a" : "");
   const scored = [];
   const seen = {};
 
   (candidates || []).forEach((c, order) => {
     if (!c || !c.id || seen[c.id]) return;
     seen[c.id] = true;
+    if (target === "youtube" && !playable(c)) return;
     const got = parseTitle(c.title);
     const notes = [];
 
     const hardA = want.qualifiers.filter((q) => HARD_QUALIFIERS.indexOf(q) !== -1);
     const hardB = got.qualifiers.filter((q) => HARD_QUALIFIERS.indexOf(q) !== -1);
-    if (!sameList(hardA, hardB)) return;
     let version = 1;
-    if (!sameList(got.qualifiers, want.qualifiers)) {
+    if (!sameList(hardA, hardB)) {
+      if (!loose) return;
+      version = 0;
+    } else if (!sameList(got.qualifiers, want.qualifiers)) {
       version = 0.5;
+    }
+    if (version < 1) {
       notes.push("version (" + (got.qualifiers.join(", ") || "plain") + " vs " + (want.qualifiers.join(", ") || "plain") + ")");
     }
 
-    const title = titleScore(source.title, want, c.title, got);
-    if (title < 0.5) return;
+    const allNames = names.concat(artistNames(c.artists).names);
+    const title = titleScore(source.title, want, c.title, got, allNames);
+    if (title < 0.5 && !loose) return;
     if (title < 1) notes.push("title (\u201c" + c.title + "\u201d)");
 
     const artist = artistScore(source, c);
-    if (!artist) return;
-    if (artist < 1) notes.push("artist (" + (c.artists || []).join(", ") + ")");
+    if (!artist && !loose) return;
+    if (artist < 1) notes.push("artist (" + ((c.artists || []).join(", ") || "unknown") + ")");
 
-    const duration = durationScore(source.durationMs, c.durationMs, tol);
+    const duration = durationScore(source.durationMs, c.durationMs, tol, videoSide);
     if (duration < 1) {
       notes.push(c.durationMs > 0 && source.durationMs > 0
         ? "length (" + mmss(c.durationMs) + " vs " + mmss(source.durationMs) + ")" : "length unknown");
@@ -563,7 +643,6 @@ function bestGuess(source, candidates, opts) {
 
     let score = 0.35 * title + 0.3 * artist + 0.2 * duration + 0.15 * version;
     if (target === "youtube") {
-      if (!playable(c)) return;
       const tier = youtubeTier(c, source.artists);
       score *= tier === 1 ? 1 : tier === 2 ? 0.97 : tier === 3 ? 0.93 : 0.85;
       if (!tier) notes.push("channel (" + (c.channel || "unknown") + ")");
@@ -584,6 +663,12 @@ function bestGuess(source, candidates, opts) {
     }
     return x.order - y.order;
   });
+  return scored;
+}
+
+// bestGuess(source, candidates, {target}) -> {candidate, score, confidence, notes[]} | null
+function bestGuess(source, candidates, opts) {
+  const scored = scoreAll(source, candidates, opts.target, false);
   const top = scored[0];
   if (!top || top.score < GUESS_FLOOR) return null;
   const notes = top.notes.slice();
@@ -601,8 +686,19 @@ function bestGuess(source, candidates, opts) {
   };
 }
 
+// closest(source, candidates, {target}) -> {candidate, score, notes[]} | null. The
+// nearest candidate with no floor and no refusals, for the owner to pick by hand when
+// bestGuess wouldn't. Never added on its own.
+function closest(source, candidates, opts) {
+  const top = scoreAll(source, candidates, opts.target, true)[0];
+  if (!top) return null;
+  return { candidate: top.c, score: Math.round(top.score * 100) / 100, notes: top.notes.slice() };
+}
+
 module.exports = {
   bestGuess: bestGuess,
+  closest: closest,
+  similarity: similarity,
   normalize: normalize,
   parseTitle: parseTitle,
   artistsAgree: artistsAgree,

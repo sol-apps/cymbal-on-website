@@ -109,6 +109,17 @@ routerAdd("POST", "/api/cymbal/owner/syncs/{id}/override", (e) => {
   return e.json(200, require(__hooks + "/lib/owner.js").override(e.app, e.request.pathValue("id"), body.url));
 }, $apis.requireAuth("users"));
 
+routerAdd("POST", "/api/cymbal/owner/syncs/{id}/pick", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  const body = e.requestInfo().body || {};
+  return e.json(200, require(__hooks + "/lib/owner.js").pick(e.app, e.request.pathValue("id"), body.candidate_id));
+}, $apis.requireAuth("users"));
+
+routerAdd("POST", "/api/cymbal/owner/syncs/{id}/dismiss", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/owner.js").dismiss(e.app, e.request.pathValue("id")));
+}, $apis.requireAuth("users"));
+
 routerAdd("POST", "/api/cymbal/owner/sync/run", (e) => {
   require(__hooks + "/lib/util.js").requireOwner(e);
   return e.json(200, require(__hooks + "/lib/sync.js").tick(e.app, { budgetMs: 25000 }));

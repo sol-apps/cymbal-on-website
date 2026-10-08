@@ -541,6 +541,55 @@ test("a live recording never matches the studio one", async () => {
   assert.equal(all.youtube.status, "attention");
 });
 
+test("the owner can take the closest candidate even below the bar for a guess", async () => {
+  const before = await rows(P.five);
+  const list = await as("owner").get("/api/cymbal/owner/syncs?status=attention");
+  const apple = list.json.syncs.find((s) => s.id === before.apple_music.id);
+  assert.ok(apple && apple.closest, list.text);
+  assert.equal(apple.closest.id, "1000000003", "the studio take, shown though a guess never crosses live to studio");
+  assert.ok(apple.closest.notes.some((n) => n.startsWith("version")));
+  const yt = list.json.syncs.find((s) => s.id === before.youtube.id);
+  assert.equal(yt.closest.id, "SongCstudio");
+
+  const path = "/api/cymbal/owner/syncs/" + before.youtube.id + "/pick";
+  assert.equal((await call("POST", path, { token: U.member.token, body: {} })).status, 403);
+  assert.equal((await as("owner").post(path, { candidate_id: "notSeenHere" })).status, 400);
+  const res = await as("owner").post(path, {});
+  assert.equal(res.status, 200, res.text);
+  const after = (await rows(P.five)).youtube;
+  assert.equal(after.status, "pending");
+  assert.equal(after.target_id, "SongCstudio");
+  assert.equal(after.match_basis, "manual");
+  assert.equal(after.needs_review, false);
+  assert.equal((await drain(P.five)).youtube.status, "synced");
+  assert.equal((await as("owner").post(path, {})).status, 400, "only rows waiting for a match");
+});
+
+test("the owner can dismiss a song that isn't on a service, and bring it back", async () => {
+  const row = (await rows(P.four)).youtube;
+  assert.equal(row.status, "attention");
+  assert.equal((await as("owner").post("/api/cymbal/owner/syncs/" + row.id + "/pick", {})).status, 400, "nothing was found to pick");
+  const path = "/api/cymbal/owner/syncs/" + row.id + "/dismiss";
+  assert.equal((await call("POST", path, { token: U.member.token })).status, 403);
+  const res = await as("owner").post(path, {});
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.remove_url, "");
+  let r = (await rows(P.four)).youtube;
+  assert.equal(r.status, "cancelled");
+  assert.equal(r.reason, "dismissed");
+  const list = await as("owner").get("/api/cymbal/owner/syncs?status=attention");
+  assert.ok(!list.json.syncs.some((s) => s.id === row.id));
+  const gone = await as("owner").get("/api/cymbal/owner/syncs?status=dismissed");
+  assert.ok(gone.json.syncs.some((s) => s.id === row.id), gone.text);
+  assert.equal((await as("owner").post(path, {})).status, 400, "already dismissed");
+
+  assert.equal((await as("owner").post("/api/cymbal/owner/syncs/" + row.id + "/retry")).status, 200);
+  r = (await rows(P.four)).youtube;
+  assert.equal(r.status, "pending");
+  assert.equal((await drain(P.four)).youtube.status, "attention");
+  assert.equal((await as("owner").post(path, {})).status, 200);
+});
+
 test("a YouTube post reaches Spotify and Apple through MusicBrainz, politely", async () => {
   const p = await share("ben", "https://youtu.be/dQw4w9WgXcQ");
   P.six = p.id;

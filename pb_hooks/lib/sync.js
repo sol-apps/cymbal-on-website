@@ -222,6 +222,14 @@ function findTarget(app, target, source) {
     last.evidence.picked = { id: c.id, title: c.title, artists: c.artists, duration_ms: c.durationMs, isrc: c.isrc || "" };
     return { basis: "guess", result: last, steps: steps };
   }
+  // Nothing close enough to add on its own. Keep the nearest anyway, so the owner can
+  // pick it with one tap if it's right after all.
+  const near = M.closest(source, pool, { target: target });
+  if (near && last) {
+    const c = near.candidate;
+    last.closest = { id: c.id, url: c.url || urls().trackUrl(target, c.id), title: c.title, artists: c.artists,
+      duration_ms: c.durationMs, score: near.score, notes: near.notes };
+  }
   return { basis: "", reason: reason, result: last, steps: steps };
 }
 
@@ -421,6 +429,7 @@ function processRow(app, rowId, token) {
       rejected: found.result ? found.result.evidence.rejected : [],
       ambiguous: found.result ? found.result.evidence.ambiguous || [] : [],
       guess: found.result ? found.result.guess || null : null,
+      closest: found.result ? found.result.closest || null : null,
     };
     if (!found.basis) {
       return finish(app, rowId, token, { status: "attention", reason: found.reason, detail: HUMAN[found.reason], evidence: evidence });

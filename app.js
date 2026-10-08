@@ -558,6 +558,7 @@
     const status = h("p", { id: "owner-status", class: "status", role: "status", "aria-live": "polite" });
     const review = h("div", { id: "owner-review" });
     const attention = h("div", { id: "owner-attention" });
+    const dismissed = h("div", { id: "owner-dismissed" });
     let open = false;
     try { open = sessionStorage.getItem("cymbal_owner_open") === "1"; } catch (_) { /* ignore */ }
     const details = h("details", { open: open ? true : null },
@@ -572,13 +573,15 @@
         h("p", { class: "small" }, "Callback URLs: ", h("code", null, s.redirect_uris.spotify), " and ", h("code", null, s.redirect_uris.youtube)),
         status,
         review,
-        attention));
+        attention,
+        dismissed));
     details.addEventListener("toggle", () => {
       try { sessionStorage.setItem("cymbal_owner_open", details.open ? "1" : "0"); } catch (_) { /* ignore */ }
     });
     box.replaceChildren(details);
     loadReview();
     loadAttention();
+    loadDismissed();
     const apple = s.providers.find((p) => p.provider === "apple_music");
     if (apple && apple.configured) appleAutoStart();
   }
@@ -716,8 +719,59 @@
           ownerSay("Marked as right.", "ok");
           loadReview();
         } catch (err) { ownerSay(err.message, "error"); }
-      } }, "LOOKS RIGHT")),
+      } }, "LOOKS RIGHT"), dismissButton(r, loadReview)),
       form);
+  }
+
+  // The song probably isn't on that service at all: stop asking about it.
+  function dismissButton(r, reload) {
+    return h("button", { class: "btn btn-small btn-quiet", type: "button", onclick: async () => {
+      if (!confirm("Dismiss this? It won't be added to " + r.target_label + " unless you retry it.")) return;
+      try {
+        const res = await api("/api/cymbal/owner/syncs/" + r.id + "/dismiss", { method: "POST" });
+        ownerSay(res.remove_url
+          ? "Dismissed. Remove the guess from the " + r.target_label + " playlist yourself."
+          : "Dismissed.", "ok");
+        reload();
+        loadDismissed();
+      } catch (err) { ownerSay(err.message, "error"); }
+    } }, "NOT ON " + r.target_label.toUpperCase());
+  }
+
+  // Songs the owner said aren't on a service, folded away, each one a RETRY from back.
+  async function loadDismissed() {
+    const box = $("owner-dismissed");
+    if (!box) return;
+    let data;
+    try { data = await api("/api/cymbal/owner/syncs?status=dismissed"); } catch (err) { box.replaceChildren(); return; }
+    if (!data.syncs.length) { box.replaceChildren(); return; }
+    box.replaceChildren(h("details", null,
+      h("summary", { class: "label" }, "DISMISSED (" + data.syncs.length + ")"),
+      h("ul", { class: "attn" }, data.syncs.map((r) => h("li", null,
+        h("strong", null, (r.post ? (r.post.title || "Untitled") + (r.post.artist ? " by " + r.post.artist : "") : "Removed post") + " to " + r.target_label),
+        h("div", { class: "row" }, h("button", { class: "btn btn-small", type: "button", onclick: async () => {
+          try {
+            await api("/api/cymbal/owner/syncs/" + r.id + "/retry", { method: "POST" });
+            ownerSay("Queued again.", "ok");
+            loadDismissed();
+          } catch (err) { ownerSay(err.message, "error"); }
+        } }, "RETRY")))))));
+  }
+
+  // Take a candidate the worker found but wouldn't add on its own.
+  function pickButton(r, candidateId, label) {
+    return h("button", { class: "btn btn-small", type: "button", onclick: async () => {
+      try {
+        await api("/api/cymbal/owner/syncs/" + r.id + "/pick", { method: "POST", body: candidateId ? { candidate_id: candidateId } : {} });
+        ownerSay("Picked. It'll be added on the next sync.", "ok");
+        loadAttention();
+      } catch (err) { ownerSay(err.message, "error"); }
+    } }, label);
+  }
+
+  function candidateLine(r, c) {
+    return c.title + (c.artists.length ? " by " + c.artists.join(", ") : "") +
+      (c.duration_ms ? " (" + mmss(c.duration_ms) + (r.want_duration_ms ? " vs " + mmss(r.want_duration_ms) : "") + ")" : "");
   }
 
   function attentionItem(r) {
@@ -732,17 +786,25 @@
       } catch (err) { ownerSay(err.message, "error"); }
     });
     const steps = Object.keys(r.steps || {}).map((k) => k + ": " + r.steps[k]).join(", ");
-    const near = (r.near_misses || []).map((n) => h("span", { class: "small" },
-      "Closest: " + n.title + (n.artists.length ? " by " + n.artists.join(", ") : "") +
-      (n.duration_ms ? " (" + mmss(n.duration_ms) + (r.want_duration_ms ? " vs " + mmss(r.want_duration_ms) : "") + ")" : "") +
-      ", differs on " + n.reasons.join(", ")));
-    const searched = r.reason === "no_match" && steps && !(r.near_misses || []).length
+    // The best of what the search found, below the bar for a guess: one tap to take it.
+    const c = r.closest;
+    const top = c ? h("div", { class: "row" },
+      h("span", null, h("span", { class: "guess-tag is-unsure" }, "CLOSEST"), " ",
+        extLink(c.url, c.title),
+        candidateLine(r, c).slice(c.title.length),
+        c.notes.length ? h("span", { class: "small" }, " Differs on " + c.notes.join("; ")) : null),
+      pickButton(r, c.id, "USE THIS")) : null;
+    const near = (r.near_misses || []).filter((n) => !c || n.id !== c.id).map((n) => h("div", { class: "row" },
+      h("span", { class: "small" }, (c ? "Also found: " : "Found: ") + candidateLine(r, n) + ", differs on " + n.reasons.join(", ")),
+      !c && n.id ? pickButton(r, n.id, "USE THIS") : null));
+    const searched = r.reason === "no_match" && steps && !(r.near_misses || []).length && !c
       ? h("span", { class: "small" }, "The search found nothing to compare against.") : null;
     return h("li", null,
       h("strong", null, (r.post ? (r.post.title || "Untitled") + (r.post.artist ? " by " + r.post.artist : "") : "Removed post") + " to " + r.target_label),
       r.post ? h("span", { class: "small" }, extLink(r.post.url, "original link")) : null,
       h("span", null, r.detail || REASONS[r.reason] || r.reason),
       steps ? h("span", { class: "small" }, "Tried " + steps) : null,
+      top,
       ...near,
       searched,
       form,
@@ -752,7 +814,7 @@
           ownerSay("Queued again.", "ok");
           loadAttention();
         } catch (err) { ownerSay(err.message, "error"); }
-      } }, "RETRY")));
+      } }, "RETRY"), dismissButton(r, loadAttention)));
   }
 
   // ── Apple Music, in the owner's browser ───────────────────────────────────

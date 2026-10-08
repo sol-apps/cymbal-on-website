@@ -21,8 +21,9 @@ https://cymbal-on-website.solhann.net
 - If nothing matches exactly, it adds the closest candidate anyway and flags it under
   "Guessed, to check" in the owner panel. It won't swap a live version, remix or
   cover for the original, or pick a different artist.
-- If there's nothing close enough, it shows up under "Needs a look", and the owner
-  pastes the right link.
+- If there's nothing close enough, it shows up under "Needs a look" with the closest
+  thing it found. The owner can use that, paste the right link, or dismiss it when the
+  song just isn't on that service.
 - Each playlist gets a song once, however many times it's posted.
 - Spotify and YouTube update in the background. Apple Music only adds songs while the
   owner has Cymbal open in a browser they've authorised.
