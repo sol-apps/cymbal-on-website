@@ -423,3 +423,24 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
   .btn:active { transform: none; }
 }
+
+/* ── stickers (owner only) ─────────────────────────────────────────────── */
+.card { position: relative; }
+.sticker-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.sticker { width: 64px; height: auto; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.sticker-placed, .sticker-carry {
+  position: absolute;
+  transform: translate(-50%, -50%) rotate(var(--rot, 0deg));
+  filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .25));
+}
+.sticker-placed { pointer-events: auto; cursor: grab; touch-action: none; }
+.sticker-carry { position: fixed; z-index: 1000; pointer-events: none; width: 72px; filter: drop-shadow(4px 6px 2px rgba(0, 0, 0, .3)); }
+.sticker-dock {
+  position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 900;
+  display: flex; gap: 8px;
+}
+.sticker-pick { padding: 6px; width: 58px; height: 58px; touch-action: none; display: grid; place-items: center; }
+.sticker-pick img { width: 40px; height: 40px; object-fit: contain; pointer-events: none; }
+.is-sticking, .is-sticking * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; touch-action: none; }
+.is-sticking iframe { pointer-events: none; }
+.card.sticker-target { outline: 3px dashed var(--accent); outline-offset: 3px; }

@@ -152,6 +152,21 @@ routerAdd("POST", "/api/cymbal/owner/apple/complete", (e) => {
   return e.json(200, require(__hooks + "/lib/sync.js").appleComplete(e.app, body.results));
 }, $apis.requireAuth("users"));
 
+routerAdd("POST", "/api/cymbal/owner/posts/{id}/stickers", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").add(e.app, e.request.pathValue("id"), e.requestInfo().body || {}));
+}, $apis.requireAuth("users"));
+
+routerAdd("POST", "/api/cymbal/owner/stickers/{id}/move", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").move(e.app, e.request.pathValue("id"), e.requestInfo().body || {}));
+}, $apis.requireAuth("users"));
+
+routerAdd("DELETE", "/api/cymbal/owner/stickers/{id}", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").remove(e.app, e.request.pathValue("id")));
+}, $apis.requireAuth("users"));
+
 // ── the worker ──────────────────────────────────────────────────────────────
 // Once a minute, a bounded pass. Quiet when there is nothing to do.
 cronAdd("cymbal-sync", "* * * * *", () => {

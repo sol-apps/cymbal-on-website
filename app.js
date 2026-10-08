@@ -263,6 +263,7 @@
 
   // Re-read the newest page so titles resolve and sync states move without a reload.
   async function refreshTop() {
+    if (carry) return; // a sticker in hand would be redrawn under the finger
     try {
       const data = await api("/api/cymbal/feed");
       data.posts.slice().reverse().forEach((p) => upsertCard(p, true));
@@ -351,7 +352,8 @@
         }, count ? "COMMENTS (" + count + ")" : "COMMENT"),
         p.can_delete ? h("button", { class: "btn-remove", type: "button", onclick: () => removePost(p.id) },
           h("span", { "aria-hidden": "true" }, "✕"), "Remove") : null),
-      h("div", { class: "comments", id: "c-" + p.id, hidden: true }));
+      h("div", { class: "comments", id: "c-" + p.id, hidden: true }),
+      p.stickers ? stickerLayer(p) : null);
     return card;
   }
 
@@ -491,6 +493,216 @@
       }
     });
     return form;
+  }
+
+  // ── stickers (owner only, for now) ───────────────────────────────────────
+  // Hand-drawn hearts and stars the owner sticks anywhere on a post. Pick one up from
+  // the dock (or a placed one off its post) and it follows the mouse or finger; let go
+  // over a post to stick it there. Dragging works, and so does tap-then-tap. Letting go
+  // anywhere that isn't a post puts a new sticker back, and takes a placed one off.
+  // The feed only carries stickers for the owner, so nobody else sees them.
+
+  const STICKERS = { heart: "A red heart", star: "A silver star" };
+  const stickerSrc = (kind) => "stickers/" + kind + ".png";
+  let carry = null;
+
+  function stickerImg(kind, cls) {
+    return h("img", { class: "sticker " + cls, src: stickerSrc(kind), alt: STICKERS[kind] || "", draggable: "false" });
+  }
+
+  function pinSticker(el, s) {
+    el.style.left = (s.x * 100) + "%";
+    el.style.top = s.y + "px";
+    el.style.setProperty("--rot", (s.rot || 0) + "deg");
+  }
+
+  function placedSticker(postId, s) {
+    const el = stickerImg(s.kind, "sticker-placed");
+    if (s.id) el.dataset.id = s.id;
+    pinSticker(el, s);
+    el.addEventListener("pointerdown", (ev) => {
+      if (carry || !el.dataset.id || ev.button > 0) return;
+      ev.preventDefault();
+      startCarry(s.kind, ev, { id: el.dataset.id, postId: postId, rot: s.rot || 0, el: el });
+    });
+    return el;
+  }
+
+  function stickerLayer(p) {
+    return h("div", { class: "sticker-layer" }, p.stickers.map((s) => placedSticker(p.id, s)));
+  }
+
+  function layerOf(card) {
+    let layer = card.querySelector(".sticker-layer");
+    if (!layer) {
+      layer = h("div", { class: "sticker-layer" });
+      card.append(layer);
+    }
+    return layer;
+  }
+
+  function cardAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    return el ? el.closest("#posts .card[data-id]") : null;
+  }
+
+  function startCarry(kind, ev, from) {
+    const el = stickerImg(kind, "sticker-carry");
+    const rot = from ? from.rot : Math.round(Math.random() * 24 - 12);
+    el.style.setProperty("--rot", rot + "deg");
+    document.body.append(el);
+    if (from) from.el.hidden = true;
+    if (ev.target.releasePointerCapture && ev.target.hasPointerCapture && ev.target.hasPointerCapture(ev.pointerId)) {
+      ev.target.releasePointerCapture(ev.pointerId);
+    }
+    carry = { kind: kind, el: el, from: from, rot: rot, x0: ev.clientX, y0: ev.clientY, moved: false, sticky: false, target: null };
+    document.body.classList.add("is-sticking");
+    follow(ev.clientX, ev.clientY);
+    window.addEventListener("pointermove", onCarryMove, true);
+    window.addEventListener("pointerdown", onCarryDown, true);
+    window.addEventListener("pointerup", onCarryUp, true);
+    window.addEventListener("pointercancel", cancelCarry, true);
+    window.addEventListener("keydown", onCarryKey, true);
+  }
+
+  function follow(x, y) {
+    carry.el.style.left = x + "px";
+    carry.el.style.top = y + "px";
+    const card = cardAt(x, y);
+    if (card !== carry.target) {
+      if (carry.target) carry.target.classList.remove("sticker-target");
+      if (card) card.classList.add("sticker-target");
+      carry.target = card;
+    }
+  }
+
+  function onCarryMove(ev) {
+    if (!carry) return;
+    if (Math.abs(ev.clientX - carry.x0) + Math.abs(ev.clientY - carry.y0) > 8) carry.moved = true;
+    follow(ev.clientX, ev.clientY);
+  }
+
+  // Tap-then-tap: the second touch or click lands the sticker, so it mustn't also
+  // press whatever is underneath.
+  function onCarryDown(ev) {
+    if (!carry) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    follow(ev.clientX, ev.clientY);
+  }
+
+  function onCarryUp(ev) {
+    if (!carry) return;
+    if (!carry.moved && !carry.sticky) {
+      carry.sticky = true; // a tap on the button: keep holding it until the next one
+      return;
+    }
+    ev.preventDefault();
+    ev.stopPropagation();
+    swallowClick();
+    drop(ev.clientX, ev.clientY);
+  }
+
+  function onCarryKey(ev) {
+    if (ev.key === "Escape") { ev.preventDefault(); cancelCarry(); }
+  }
+
+  function swallowClick() {
+    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+    window.addEventListener("click", stop, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener("click", stop, true), 400);
+  }
+
+  function endCarry() {
+    const c = carry;
+    carry = null;
+    window.removeEventListener("pointermove", onCarryMove, true);
+    window.removeEventListener("pointerdown", onCarryDown, true);
+    window.removeEventListener("pointerup", onCarryUp, true);
+    window.removeEventListener("pointercancel", cancelCarry, true);
+    window.removeEventListener("keydown", onCarryKey, true);
+    document.body.classList.remove("is-sticking");
+    if (c.target) c.target.classList.remove("sticker-target");
+    c.el.remove();
+    return c;
+  }
+
+  function cancelCarry() {
+    if (!carry) return;
+    const c = endCarry();
+    if (c.from) c.from.el.hidden = false;
+  }
+
+  async function drop(x, y) {
+    const c = endCarry();
+    const card = cardAt(x, y);
+    const from = c.from;
+    try {
+      if (!card) {
+        if (!from) return;
+        from.el.remove();
+        await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
+        return;
+      }
+      const r = card.getBoundingClientRect();
+      const spot = {
+        kind: c.kind,
+        x: Math.min(1, Math.max(0, (x - r.left) / r.width)),
+        y: Math.round(Math.min(5000, Math.max(0, y - r.top))),
+        rot: c.rot,
+      };
+      const postId = card.dataset.id;
+      if (from && from.postId === postId) {
+        pinSticker(from.el, spot);
+        from.el.hidden = false;
+        await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id) + "/move", { method: "POST", body: spot });
+        return;
+      }
+      const el = placedSticker(postId, spot);
+      layerOf(card).append(el);
+      if (from) {
+        from.el.remove();
+        await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
+      }
+      try {
+        const res = await api("/api/cymbal/owner/posts/" + encodeURIComponent(postId) + "/stickers", { method: "POST", body: spot });
+        el.dataset.id = res.sticker.id;
+      } catch (err) {
+        el.remove();
+        throw err;
+      }
+    } catch (err) {
+      say("feed-status", "Sticker: " + err.message, "error");
+    }
+  }
+
+  function stickerDock() {
+    const dock = h("div", { id: "sticker-dock", class: "sticker-dock", role: "group", "aria-label": "Stickers" },
+      Object.keys(STICKERS).map((kind) => h("button", {
+        class: "btn sticker-pick", type: "button", title: STICKERS[kind] + ": pick it up, then let go on a post",
+        onpointerdown: (ev) => {
+          if (carry || ev.button > 0) return;
+          ev.preventDefault();
+          startCarry(kind, ev, null);
+        },
+        // Keyboard: Enter or Space picks it up at the button; Escape puts it back.
+        onclick: (ev) => {
+          if (carry || ev.detail !== 0) return;
+          const r = ev.currentTarget.getBoundingClientRect();
+          startCarry(kind, { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, target: ev.currentTarget }, null);
+          carry.sticky = true;
+        },
+      }, h("img", { src: stickerSrc(kind), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, STICKERS[kind]))));
+    return dock;
+  }
+
+  function showStickerDock(on) {
+    const dock = $("sticker-dock");
+    if (on && !dock) document.body.append(stickerDock());
+    if (!on) {
+      cancelCarry();
+      if (dock) dock.remove();
+    }
   }
 
   // ── the owner ─────────────────────────────────────────────────────────────
@@ -1034,6 +1246,7 @@
     $("signout").hidden = !user;
     $("owner-signin").hidden = !!user;
     if (user) closeLogin();
+    showStickerDock(owner);
     if (owner) {
       loadOwner();
     } else {
