@@ -720,11 +720,46 @@
     say("owner-login-status", "");
   }
 
-  $("owner-signin").addEventListener("click", () => {
+  // The top bar's account button: signed out it opens the sign-in form, signed in it
+  // opens a small menu with SIGN OUT. On phones it's just the circle; wider screens
+  // also show the name.
+  function closeMenu() {
+    $("account-menu").hidden = true;
+    $("account").setAttribute("aria-expanded", "false");
+  }
+
+  function showAccount(user) {
+    const name = user ? (user.name || String(user.email || "").split("@")[0] || "Owner") : "";
+    const old = $("account-avatar");
+    const circle = user ? avatar(name) : h("span", {}, "");
+    circle.id = "account-avatar";
+    circle.classList.add("account-avatar");
+    if (!user) circle.classList.add("avatar", "avatar-out");
+    old.replaceWith(circle);
+    $("account-label").textContent = user ? name : "SIGN IN";
+    $("account").setAttribute("aria-label", user ? "Signed in as " + name : "Sign in");
+    closeMenu();
+  }
+
+  $("account").addEventListener("click", () => {
+    if (PBAuth.isSignedIn()) {
+      const open = $("account-menu").hidden;
+      $("account-menu").hidden = !open;
+      $("account").setAttribute("aria-expanded", String(open));
+      return;
+    }
     const form = $("owner-login");
     if (!form.hidden) return closeLogin();
     form.hidden = false;
+    form.scrollIntoView({ block: "nearest" });
     $("owner-email").focus();
+  });
+
+  document.addEventListener("click", (ev) => {
+    if (!ev.target.closest(".account")) closeMenu();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !$("account-menu").hidden) { closeMenu(); $("account").focus(); }
   });
 
   $("owner-login-cancel").addEventListener("click", closeLogin);
@@ -1231,10 +1266,27 @@
     appleTimer = null;
   }
 
+  // ── playlists (under the composer) ────────────────────────────────────────
+  // One button per service. One that isn't set up yet shows greyed out, so the row
+  // always reads Spotify, Apple Music, YouTube in the same order.
+  async function loadPlaylists() {
+    let data;
+    try { data = await api("/api/cymbal/playlists"); } catch (err) { return; }
+    $("playlist-btns").replaceChildren(...data.playlists.map((p) => {
+      const kids = [h("span", { class: "pl-dot", "aria-hidden": "true" }), p.label];
+      const cls = "btn btn-small pl-btn pl-" + String(p.provider).replace(/[^a-z_]/g, "");
+      const href = safeHref(p.url);
+      if (!href) return h("span", { class: cls + " is-waiting", title: p.label + " playlist isn't set up yet" }, kids);
+      return h("a", { class: cls, href: href, target: "_blank", rel: "noopener noreferrer" }, kids);
+    }));
+    $("playlists").hidden = false;
+  }
+
   // ── boot ──────────────────────────────────────────────────────────────────
   // Last, on purpose: everything below touches state declared throughout this file.
 
   loadFeed(true);
+  loadPlaylists();
   pollTimer = setInterval(() => { if (!document.hidden) refreshTop(); }, 45000);
 
   const q = new URLSearchParams(location.search);
@@ -1250,8 +1302,7 @@
   let ownerState = null;
   PBAuth.onChange((user) => {
     const owner = !!user && user.role === "admin";
-    $("signout").hidden = !user;
-    $("owner-signin").hidden = !!user;
+    showAccount(user);
     if (user) closeLogin();
     showStickerDock(owner);
     if (owner) {
