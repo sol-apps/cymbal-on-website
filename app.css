@@ -135,14 +135,15 @@ a { color: inherit; text-underline-offset: 3px; }
 
 /* Account: the circle alone on phones, circle + name from 560px up. */
 .account { position: relative; }
-.account-btn { padding: 4px; gap: 8px; max-width: 220px; }
-.account-btn .account-avatar { width: 28px; height: 28px; border-width: 2px; font-size: 11px; }
+/* Same box as the DARK button beside it: its padding and font, a circle that fits a line. */
+.account-btn { gap: 6px; max-width: 220px; }
+.account-btn .account-avatar { width: 18px; height: 18px; border-width: 2px; font-size: 8px; margin: -3px 0; }
 .avatar-out { background: var(--panel-2); position: relative; overflow: hidden; }
 /* A plain head-and-shoulders outline for "not signed in". */
 .avatar-out::before, .avatar-out::after { content: ""; position: absolute; left: 50%; transform: translateX(-50%); background: var(--line); }
-.avatar-out::before { top: 5px; width: 9px; height: 9px; border-radius: 50%; }
-.avatar-out::after { top: 16px; width: 18px; height: 14px; border-radius: 50% 50% 0 0; }
-.account-label { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 6px; }
+.avatar-out::before { top: 2px; width: 6px; height: 6px; border-radius: 50%; }
+.avatar-out::after { top: 9px; width: 12px; height: 9px; border-radius: 50% 50% 0 0; }
+.account-label { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-menu {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 6;
   padding: 8px; display: grid; gap: 6px; min-width: 120px;
@@ -430,7 +431,6 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   .brand-mark { width: 18px; height: 18px; }
   .top-actions { gap: 6px; }
   .top-actions .btn { padding: 8px 7px; font-size: 8px; }
-  .top-actions .account-btn { padding: 4px; }
   .pl-btn { padding-left: 6px; padding-right: 6px; font-size: 8px; gap: 5px; }
   .url-field input { padding-right: 12px; }
   .url-kind { position: static; transform: none; display: block; max-width: none; text-align: left; margin-top: 6px; }
@@ -439,7 +439,6 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 
 @media (min-width: 560px) {
   .account-label { display: inline; }
-  .account-btn { padding: 4px 8px 4px 4px; }
   body { font-size: 16px; }
   .panel { padding: 16px; }
   .btn { font-size: 11px; }
