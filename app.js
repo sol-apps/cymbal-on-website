@@ -462,7 +462,7 @@
     input.addEventListener("input", () => { rid = null; });
     const form = h("form", { class: "comment-form", novalidate: true },
       h("label", { class: "visually-hidden", for: id }, "Write a comment"),
-      input, h("div", { class: "row" }, name, btn), status);
+      name, h("div", { class: "row" }, input, btn), status);
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const body = input.value.trim();
