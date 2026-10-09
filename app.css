@@ -302,9 +302,12 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 }
 .resolving { color: var(--muted); }
 
-.player { border: 3px solid var(--line); border-radius: 12px; overflow: hidden; background: #000; }
-.player iframe { display: block; width: 100%; border: 0; }
-.player-spotify { background: transparent; }
+/* Spotify and Apple draw their own card with rounded corners inside the iframe, about
+ * 12px on Spotify. The frame's inner curve (outer radius minus the 3px border) has to
+ * be at least that, or the page shows through the corners between card and frame. */
+.player { border: 3px solid var(--line); border-radius: 15px; overflow: hidden; background: #000; }
+.player iframe { display: block; width: 100%; border: 0; border-radius: 12px; }
+.player-spotify, .player-apple { background: transparent; }
 .player-spotify iframe { height: 152px; }
 .player-youtube iframe { aspect-ratio: 16 / 9; height: auto; }
 .player-apple iframe { height: 175px; }
