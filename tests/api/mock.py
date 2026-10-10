@@ -4,7 +4,7 @@
 Paths are prefixed with the lib/util.js BASES key they replace:
   /spotify_api  /spotify_accounts  /youtube_api  /google_token  /google_auth
   /apple_api    /musicbrainz       /itunes        /bandcamp/<artist subdomain>
-Only a PocketBase in LOCAL identity mode with CYMBAL_MOCK_BASE set is sent here.
+Only a PocketBase with PB_DEV and CYMBAL_MOCK_BASE set is sent here.
 
 Test control:
   POST /__control {"once": {k: v}, "set": {k: v}, "clear": [k]}   inject faults

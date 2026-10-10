@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/api/dev.sh — a local Cymbal to look at: the provider mock, a LOCAL-mode
+# tests/api/dev.sh — a local Cymbal to look at: the provider mock, a
 # PocketBase with this checkout's hooks and migrations, and seeded people and posts
 # (tests/api/seed.py). Nothing here touches prod, pb-secret or a real provider.
 #
@@ -22,7 +22,7 @@ trap 'kill "$MOCK_PID" 2>/dev/null || true' EXIT INT TERM
 
 SU_EMAIL="dev@cymbal.invalid"
 SU_PASS="$(openssl rand -hex 12)"
-GREENLIGHT_IDENTITY_MODE=local "$PB_BIN" superuser upsert "$SU_EMAIL" "$SU_PASS" --dir "$DIR/pb_data" >/dev/null
+"$PB_BIN" superuser upsert "$SU_EMAIL" "$SU_PASS" --dir "$DIR/pb_data" >/dev/null
 
 (
   for _ in $(seq 1 40); do
@@ -34,7 +34,7 @@ GREENLIGHT_IDENTITY_MODE=local "$PB_BIN" superuser upsert "$SU_EMAIL" "$SU_PASS"
     || echo "seed failed: see $DIR/seed.log" >&2
 ) &
 
-env GREENLIGHT_IDENTITY_MODE=local \
+env PB_DEV=1 \
     CYMBAL_TOKEN_KEY=0123456789abcdef0123456789abcdef \
     CYMBAL_MOCK_BASE="http://127.0.0.1:$MOCK_PORT" \
     CYMBAL_PUBLIC_URL="http://127.0.0.1:$PORT" \

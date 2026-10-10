@@ -3,7 +3,7 @@
 and connected mock providers, so the page can be looked at.
 
 Posting needs no account: each seeded person is a name, a browser key and an address.
-Local identity mode has no identity provider, so the owner's session is a
+A test instance has no owner account with a known password, so the owner's session is a
 superuser-impersonated token, written to the file named on the command line.
 Nothing here can reach prod: it only talks to PB_URL, which dev.sh points at 127.0.0.1.
 """

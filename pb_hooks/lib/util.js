@@ -85,8 +85,9 @@ function env(name, fallback) {
   return v ? v : (fallback || "");
 }
 
+// True on a developer's machine: pb-dev and the tests set PB_DEV. Prod never does.
 function localMode() {
-  return $os.getenv("GREENLIGHT_IDENTITY_MODE") === "local";
+  return $os.getenv("PB_DEV") === "1";
 }
 
 // Tokens at rest. $security.encrypt is AES-GCM and needs exactly 32 characters of key.
@@ -105,7 +106,7 @@ function unseal(sealed) {
 }
 
 // Provider endpoints. The test mock can replace them, but ONLY on an instance that
-// is explicitly in local identity mode: a production instance cannot be pointed
+// has PB_DEV set, which prod never does: a production instance cannot be pointed
 // anywhere else by configuration.
 const BASES = {
   spotify_api: "https://api.spotify.com/v1",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/api/run.sh — Cymbal end to end, against a throwaway local PocketBase.
 #
-# Starts tests/api/mock.py (every provider) and a PocketBase in LOCAL identity mode
+# Starts tests/api/mock.py (every provider) and a PocketBase with PB_DEV set
 # on spare ports, with this checkout's hooks and migrations and a data dir that is
 # deleted afterwards. Nothing here touches prod, pb-secret or a real provider.
 #
@@ -12,7 +12,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 PB_BIN="${PB_BIN:-$HOME/.local/bin/pocketbase}"
 PORT="${PORT:-8097}"
 MOCK_PORT="${MOCK_PORT:-8098}"
-[ -x "$PB_BIN" ] || { echo "✗ no pocketbase at $PB_BIN (run platform/bin/pb-dev once to install it)" >&2; exit 1; }
+[ -x "$PB_BIN" ] || { echo "✗ no pocketbase at $PB_BIN (run pb-dev once to install it)" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 PB_PID=""
@@ -30,9 +30,9 @@ MOCK_PID=$!
 
 SU_EMAIL="tests@cymbal.invalid"
 SU_PASS="$(openssl rand -hex 12)"
-GREENLIGHT_IDENTITY_MODE=local "$PB_BIN" superuser upsert "$SU_EMAIL" "$SU_PASS" --dir "$WORK/pb_data" >/dev/null
+"$PB_BIN" superuser upsert "$SU_EMAIL" "$SU_PASS" --dir "$WORK/pb_data" >/dev/null
 
-env GREENLIGHT_IDENTITY_MODE=local \
+env PB_DEV=1 \
     CYMBAL_TOKEN_KEY=0123456789abcdef0123456789abcdef \
     CYMBAL_MOCK_BASE="http://127.0.0.1:$MOCK_PORT" \
     CYMBAL_PUBLIC_URL="http://127.0.0.1:$PORT" \

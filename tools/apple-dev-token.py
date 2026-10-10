@@ -5,8 +5,8 @@ PocketBase's Goja runtime cannot sign ES256, so the token is minted here and shi
 as an ordinary runtime secret:
 
     python3 tools/apple-dev-token.py --team TEAMID --key-id KEYID --p8 ~/secure/AuthKey_KEYID.p8 \
-      | platform/bin/pb-secret set cymbal-on-website.APPLE_DEVELOPER_TOKEN
-    platform/bin/pb-provision cymbal-on-website --push-env
+      | pb-secret set cymbal-on-website.APPLE_DEVELOPER_TOKEN
+    push-secrets cymbal-on-website
 
 Apple caps a developer token at about six months, so this defaults to 180 days and
 prints the expiry on stderr. Re-run it before then. The .p8 key never leaves this

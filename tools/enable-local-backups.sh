@@ -5,7 +5,7 @@
 #   scp tools/enable-local-backups.sh prod:/tmp/
 #   ssh -t prod 'sudo bash /tmp/enable-local-backups.sh cymbal-on-website'
 #
-# Why this exists instead of platform/bin/pb-backups: that tool must run where the
+# Why this exists rather than a tool run from the laptop: it must run where the
 # superuser password is (prod, /etc/pocketbase/<slug>.superuser, root 0600) and it
 # needs jq, which prod does not have. This does the same PATCH with curl and the
 # python3 standard library. The password is read on prod and never printed or sent
