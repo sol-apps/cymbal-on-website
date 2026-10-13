@@ -8,8 +8,12 @@
  * Nobody signs in to post. This browser gets a random private key the first time the
  * page loads and sends it as X-Cymbal-Key; the server stores only its hash, and it is
  * what lets this browser remove its own posts. The typed name is remembered here.
- * The owner signs in from the footer, with an email and password, for the owner
+ * The owner signs in from the top bar, with an email and password, for the owner
  * panel; that session is thirty minutes and never renewed silently (pb-auth.js).
+ *
+ * The same file runs settings.html, the owner's second page (body data-page=
+ * "settings"), which has no composer or feed. New features are switched on per
+ * audience in features.js; on() below is the only thing that reads it.
  */
 (() => {
   "use strict";
@@ -22,6 +26,24 @@
   const LABELS = { spotify: "Spotify", apple_music: "Apple Music", youtube: "YouTube", bandcamp: "Bandcamp" };
   const STATE_TEXT = { pending: "pending", synced: "synced", attention: "attention", cancelled: "cancelled" };
   const STATE_MARK = { pending: "…", synced: "✓", attention: "!", cancelled: "×" };
+  const PAGE = document.body.dataset.page || "feed";
+  const onFeed = PAGE === "feed";
+
+  // ── features (features.js) ────────────────────────────────────────────────
+  // "owner" features are drawn only while the owner is signed in. Each one also puts
+  // an ff-<name> class on <html> so the stylesheet can follow the same switch.
+
+  let ownerNow = PBAuth.isAdmin();
+
+  function on(name) {
+    const v = (typeof FEATURES === "object" && FEATURES) ? FEATURES[name] : "off";
+    return v === "all" || (v === "owner" && ownerNow);
+  }
+
+  function applyFeatures() {
+    if (typeof FEATURES !== "object") return;
+    Object.keys(FEATURES).forEach((k) => document.documentElement.classList.toggle("ff-" + k, on(k)));
+  }
 
   // ── tiny helpers ──────────────────────────────────────────────────────────
 
@@ -160,66 +182,69 @@
     return "?";
   }
 
-  $("name").value = savedName();
-  showName(false);
-  $("name-change").addEventListener("click", () => { showName(true); $("name").focus(); $("name").select(); });
-  $("url").addEventListener("input", () => {
-    postRid = null;
-    const url = $("url").value.trim();
-    const kind = url ? linkKind(url) : "";
-    const tag = $("url-kind");
-    tag.textContent = kind === "?" ? "Not a supported link" : kind;
-    tag.className = "url-kind" + (kind === "?" ? " is-bad" : kind ? " is-good" : "");
-    if (url) openComposer();
-    say("composer-status", "");
-  });
-  $("url").addEventListener("paste", () => setTimeout(() => { if ($("url").value.trim()) $("caption").focus(); }, 0));
-  $("caption").addEventListener("input", () => {
-    $("caption-count").textContent = $("caption").value.length + "/500";
-  });
-
-  $("composer").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    const url = $("url").value.trim();
-    const name = $("name").value.trim();
-    if (!url) {
-      say("composer-status", "Paste a song link first.", "error");
-      $("url").focus();
-      return;
-    }
-    if (name.length < 2) {
-      say("composer-status", "Add your name.", "error");
-      openComposer();
-      showName(true);
-      $("name").focus();
-      return;
-    }
-    if (!postRid) postRid = requestId();
-    const btn = $("post");
-    btn.disabled = true;
-    say("composer-status", "Posting…");
-    try {
-      const res = await api("/api/cymbal/posts", {
-        method: "POST",
-        body: { url: url, name: name, caption: $("caption").value, request_id: postRid },
-      });
+  // Only the feed page has a composer.
+  function setupComposer() {
+    $("name").value = savedName();
+    showName(false);
+    $("name-change").addEventListener("click", () => { showName(true); $("name").focus(); $("name").select(); });
+    $("url").addEventListener("input", () => {
       postRid = null;
-      rememberName(name);
-      $("url").value = "";
-      $("caption").value = "";
-      $("caption-count").textContent = "0/500";
-      $("url-kind").textContent = "";
-      $("composer-more").hidden = true;
-      showName(false);
-      upsertCard(res.post, true);
-      say("composer-status", res.replayed ? "Already posted." : "Posted. It'll be added to the playlists shortly.", "ok");
-    } catch (err) {
-      if (err.status >= 400 && err.status < 500) postRid = null;
-      say("composer-status", err.message, "error");
-    } finally {
-      btn.disabled = false;
-    }
-  });
+      const url = $("url").value.trim();
+      const kind = url ? linkKind(url) : "";
+      const tag = $("url-kind");
+      tag.textContent = kind === "?" ? "Not a supported link" : kind;
+      tag.className = "url-kind" + (kind === "?" ? " is-bad" : kind ? " is-good" : "");
+      if (url) openComposer();
+      say("composer-status", "");
+    });
+    $("url").addEventListener("paste", () => setTimeout(() => { if ($("url").value.trim()) $("caption").focus(); }, 0));
+    $("caption").addEventListener("input", () => {
+      $("caption-count").textContent = $("caption").value.length + "/500";
+    });
+
+    $("composer").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const url = $("url").value.trim();
+      const name = $("name").value.trim();
+      if (!url) {
+        say("composer-status", "Paste a song link first.", "error");
+        $("url").focus();
+        return;
+      }
+      if (name.length < 2) {
+        say("composer-status", "Add your name.", "error");
+        openComposer();
+        showName(true);
+        $("name").focus();
+        return;
+      }
+      if (!postRid) postRid = requestId();
+      const btn = $("post");
+      btn.disabled = true;
+      say("composer-status", "Posting…");
+      try {
+        const res = await api("/api/cymbal/posts", {
+          method: "POST",
+          body: { url: url, name: name, caption: $("caption").value, request_id: postRid },
+        });
+        postRid = null;
+        rememberName(name);
+        $("url").value = "";
+        $("caption").value = "";
+        $("caption-count").textContent = "0/500";
+        $("url-kind").textContent = "";
+        $("composer-more").hidden = true;
+        showName(false);
+        upsertCard(res.post, true);
+        say("composer-status", res.replayed ? "Already posted." : "Posted. It'll be added to the playlists shortly.", "ok");
+      } catch (err) {
+        if (err.status >= 400 && err.status < 500) postRid = null;
+        say("composer-status", err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
 
   // ── feed ──────────────────────────────────────────────────────────────────
 
@@ -259,8 +284,6 @@
       h("span", { class: "skel-line short" }), h("span", { class: "skel-line" }), h("span", { class: "skel-line mid" }));
   }
 
-  $("more").addEventListener("click", () => loadFeed(false));
-
   // Re-read the newest page so titles resolve and sync states move without a reload.
   async function refreshTop() {
     if (carry) return; // a sticker in hand would be redrawn under the finger
@@ -292,6 +315,12 @@
     for (const ch of String(name)) n = (n * 31 + ch.codePointAt(0)) >>> 0;
     const first = Array.from(String(name).trim())[0] || "?";
     return h("span", { class: "avatar av-" + (n % 6), "aria-hidden": "true" }, first.toUpperCase());
+  }
+
+  // Someone who posted without an account: the same plain outline as the signed-out
+  // top bar, rather than a letter that suggests a profile.
+  function anonAvatar() {
+    return h("span", { class: "avatar avatar-out avatar-anon", "aria-hidden": "true" });
   }
 
   // The embed for a post's own link, built only from the id in a canonical URL the
@@ -334,10 +363,13 @@
     const fallback = (p.source_label || "Unknown") + " track";
     const title = p.title || (p.unavailable ? "Couldn't look this one up" : (p.resolving && !stale ? "Finding the track details…" : fallback));
     const count = p.comment_count || 0;
-    const card = h("li", { class: "card panel", "data-id": p.id },
+    const card = h("li", { class: "card panel", "data-id": p.id, "data-count": count },
       h("div", { class: "card-head" },
-        avatar(p.poster),
-        h("span", { class: "who" }, h("strong", null, p.poster), h("span", { class: "when" }, when(p.created))),
+        on("accountAvatars") && !p.account ? anonAvatar() : avatar(p.poster),
+        h("span", { class: "who" }, h("strong", null, p.poster), h("span", { class: "when" }, when(p.created),
+          on("listenCount") ? h("span", { class: "listens", title: "Browsers that played this" },
+            " · ", h("span", { "aria-hidden": "true" }, "♪ "), h("span", { class: "js-listens" }, String(p.listen_count || 0)),
+            h("span", null, p.listen_count === 1 ? " listen" : " listens")) : null)),
         h("span", { class: "src src-" + (p.source || "x") }, (p.source_label || "").toUpperCase())),
       p.caption ? h("p", { class: "caption" }, p.caption) : null,
       h("div", { class: "song" },
@@ -347,13 +379,19 @@
       syncChips(p),
       h("div", { class: "card-actions" },
         h("button", {
-          class: "btn btn-small js-toggle", type: "button", "aria-expanded": "false", "aria-controls": "c-" + p.id,
-          onclick: (ev) => toggleComments(ev.currentTarget.closest(".card"), p.id),
-        }, count ? "COMMENTS (" + count + ")" : "COMMENT"),
+          class: "btn btn-small js-toggle" + (on("plusComment") ? " btn-tiny" : ""), type: "button",
+          "aria-expanded": "false", "aria-controls": "c-" + p.id,
+          onclick: (ev) => (on("openComments") ? toggleCommentForm : toggleComments)(ev.currentTarget.closest(".card"), p.id),
+        }, commentLabel(count)),
+        on("stickerButton") && ownerNow ? h("button", {
+          class: "btn btn-small btn-tiny js-stick", type: "button", "aria-expanded": "false",
+          onclick: (ev) => toggleTray(ev.currentTarget.closest(".card"), ev.currentTarget),
+        }, h("img", { class: "stick-icon", src: stickerSrc("heart"), alt: "" }), "STICKER") : null,
         p.can_delete ? h("button", { class: "btn-remove", type: "button", onclick: () => removePost(p.id) },
           h("span", { "aria-hidden": "true" }, "✕"), "Remove") : null),
       h("div", { class: "comments", id: "c-" + p.id, hidden: true }),
       p.stickers && p.stickers.length ? stickerLayer(p) : null);
+    if (on("openComments")) fillThread(card, p);
     return card;
   }
 
@@ -367,7 +405,10 @@
     if (placeholder) placeholder.remove();
     if (old) {
       const oldComments = old.querySelector(".comments");
-      if (oldComments && !oldComments.hidden) {
+      // An open thread stays as it is. Where every thread is open, only one being
+      // written in or unfolded stays; the rest take the fresh comments.
+      const busy = oldComments && (oldComments.querySelector("form") || oldComments.dataset.expanded === "1");
+      if (oldComments && !oldComments.hidden && (!on("openComments") || busy)) {
         card.querySelector(".comments").replaceWith(oldComments);
         card.querySelector(".js-toggle").setAttribute("aria-expanded", "true");
       }
@@ -378,6 +419,7 @@
         // moves: the refreshed card's other parts move in around it instead.
         const parts = [...card.children];
         const at = parts.indexOf(freshPlayer);
+        old.dataset.count = card.dataset.count;
         [...old.children].forEach((c) => { if (c !== oldPlayer) c.remove(); });
         oldPlayer.before(...parts.slice(0, at));
         oldPlayer.after(...parts.slice(at + 1));
@@ -436,19 +478,98 @@
           if (!confirm("Remove this comment?")) return;
           try {
             await api("/api/cymbal/comments/" + encodeURIComponent(c.id), { method: "DELETE" });
+            const at = li.closest(".card") || card;
             li.remove();
-            bumpCount(card, -1);
+            bumpCount(at, -1);
           } catch (err) { alert(err.message); }
         } }, "remove") : null),
       h("p", { class: "comment-body" }, c.body));
     return li;
   }
 
+  function commentLabel(n) {
+    if (on("openComments")) return "+ COMMENT";
+    if (on("plusComment")) return n ? "+ COMMENT (" + n + ")" : "+ COMMENT";
+    return n ? "COMMENTS (" + n + ")" : "COMMENT";
+  }
+
   function bumpCount(card, delta) {
+    const n = Math.max(0, Number(card.dataset.count || 0) + delta);
+    card.dataset.count = n;
+    card.querySelector(".js-toggle").textContent = commentLabel(n);
+    if (on("openComments")) foldButton(card);
+  }
+
+  // ── comments shown on the card (openComments) ─────────────────────────────
+  // The feed brings each post's first three comments. More than three folds behind
+  // SHOW N MORE, which fetches the rest; + COMMENT opens the form under them.
+
+  const FOLD = 3;
+
+  function fillThread(card, p) {
+    const box = card.querySelector(".comments");
+    const list = h("ol", { class: "comment-list is-folded" }, (p.comments || []).map((c) => commentItem(c, card)));
+    box.replaceChildren(list, h("button", { class: "link-btn more-comments", type: "button", hidden: true,
+      onclick: (ev) => unfold(ev.currentTarget.closest(".card")) }));
+    box.hidden = !list.children.length;
+    foldButton(card);
+  }
+
+  function foldButton(card) {
+    const box = card.querySelector(".comments");
+    const btn = box.querySelector(".more-comments");
+    const list = box.querySelector(".comment-list");
+    if (!btn || !list) return;
+    const n = Number(card.dataset.count || 0);
+    const folded = list.classList.contains("is-folded");
+    btn.hidden = n <= FOLD;
+    btn.textContent = folded ? "SHOW " + (n - FOLD) + " MORE" : "SHOW FEWER";
+    btn.setAttribute("aria-expanded", String(!folded));
+  }
+
+  async function unfold(card) {
+    const box = card.querySelector(".comments");
+    const list = box.querySelector(".comment-list");
+    if (!list.classList.contains("is-folded")) {
+      list.classList.add("is-folded");
+      box.dataset.expanded = "0";
+      foldButton(card);
+      return;
+    }
+    if (list.children.length < Number(card.dataset.count || 0)) {
+      try {
+        const data = await api("/api/cymbal/posts/" + encodeURIComponent(card.dataset.id) + "/comments");
+        list.replaceChildren(...data.comments.map((c) => commentItem(c, card)));
+      } catch (err) {
+        say("feed-status", err.message, "error");
+        return;
+      }
+    }
+    list.classList.remove("is-folded");
+    box.dataset.expanded = "1";
+    foldButton(card);
+  }
+
+  function toggleCommentForm(card, postId) {
+    const box = card.querySelector(".comments");
     const btn = card.querySelector(".js-toggle");
-    const m = /\((\d+)\)/.exec(btn.textContent);
-    const n = Math.max(0, (m ? Number(m[1]) : 0) + delta);
-    btn.textContent = n ? "COMMENTS (" + n + ")" : "COMMENT";
+    const open = box.querySelector("form");
+    if (open) {
+      open.remove();
+      btn.setAttribute("aria-expanded", "false");
+      box.hidden = !box.querySelector(".comment-list").children.length;
+      return;
+    }
+    let list = box.querySelector(".comment-list");
+    if (!list) {
+      list = h("ol", { class: "comment-list is-folded" });
+      box.prepend(list);
+    }
+    const form = commentForm(postId, list, card);
+    box.append(form);
+    box.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    form.querySelector("textarea").focus();
   }
 
   function commentForm(postId, list, card) {
@@ -481,8 +602,17 @@
         input.value = "";
         status.textContent = "";
         if (!res.replayed) {
-          list.append(commentItem(res.comment, card));
-          bumpCount(card, 1);
+          const at = form.closest(".card") || card;
+          const missing = on("openComments") && list.children.length < Number(at.dataset.count || 0);
+          bumpCount(at, 1);
+          if (missing) {
+            // Some of the thread was never fetched: fetch it all, the new one included.
+            list.classList.add("is-folded");
+            await unfold(at);
+          } else {
+            list.append(commentItem(res.comment, at));
+            if (on("openComments") && list.children.length > FOLD && list.classList.contains("is-folded")) await unfold(at);
+          }
         }
       } catch (err) {
         if (err.status >= 400 && err.status < 500) rid = null;
@@ -502,12 +632,31 @@
   // works, and so does tap-then-tap. Letting go anywhere that isn't a post puts a new
   // sticker back, and takes a placed one off.
 
-  const STICKERS = { heart: "A red heart", star: "A silver star" };
-  const stickerSrc = (kind) => "stickers/" + kind + ".png";
+  // Every kind there is: the built-in two straight away, the owner's uploads once
+  // /api/cymbal/sticker-kinds answers. The feed waits for that so none draws blank.
+  let KINDS = [
+    { id: "heart", label: "A red heart", src: "stickers/heart.png" },
+    { id: "star", label: "A silver star", src: "stickers/star.png" },
+  ];
+  const kindOf = (id) => KINDS.find((k) => k.id === id);
+  const stickerSrc = (kind) => { const k = kindOf(kind); return k && safeSrc(k.src) ? k.src : ""; };
   let carry = null;
 
+  // Same-origin paths only: the built-in files and PocketBase's /api/files/.
+  function safeSrc(src) {
+    return typeof src === "string" && /^(stickers\/[a-z]+\.png|\/api\/files\/sticker_kinds\/[a-z0-9]{15}\/[A-Za-z0-9_.%-]+)$/.test(src);
+  }
+
+  async function loadKinds() {
+    try {
+      const data = await api("/api/cymbal/sticker-kinds");
+      KINDS = data.kinds.filter((k) => safeSrc(k.src));
+    } catch (_) { /* the built-in two still work */ }
+  }
+
   function stickerImg(kind, cls) {
-    return h("img", { class: "sticker " + cls, src: stickerSrc(kind), alt: STICKERS[kind] || "", draggable: "false" });
+    const k = kindOf(kind);
+    return h("img", { class: "sticker " + cls, src: stickerSrc(kind), alt: k ? k.label : "", draggable: "false" });
   }
 
   function pinSticker(el, s) {
@@ -531,7 +680,51 @@
   }
 
   function stickerLayer(p) {
-    return h("div", { class: "sticker-layer" }, p.stickers.map((s) => placedSticker(p.id, s)));
+    return h("div", { class: "sticker-layer" }, p.stickers.filter((s) => kindOf(s.kind)).map((s) => placedSticker(p.id, s)));
+  }
+
+  // ── the STICKER button on a post (stickerButton) ──────────────────────────
+  // Opens a row of every kind under the post's buttons. Tap one and it sticks on that
+  // post straight away; drag one and it goes wherever it's let go, like the dock.
+
+  function toggleTray(card, btn) {
+    const open = card.querySelector(".sticker-tray");
+    if (open) {
+      open.remove();
+      btn.setAttribute("aria-expanded", "false");
+      return;
+    }
+    const tray = h("div", { class: "sticker-tray", role: "group", "aria-label": "Stick a sticker on this post" },
+      KINDS.map((k) => h("button", {
+        class: "btn sticker-pick", type: "button", title: k.label + ": tap to stick it here, or drag it",
+        onpointerdown: (ev) => {
+          if (carry || ev.button > 0) return;
+          ev.preventDefault();
+          startCarry(k.id, ev, null);
+          carry.home = card;
+        },
+        onclick: (ev) => {
+          if (carry || ev.detail !== 0) return; // keyboard: stick it here
+          stickHere(card, k.id);
+        },
+      }, h("img", { src: stickerSrc(k.id), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, k.label))));
+    card.querySelector(".card-actions").after(tray);
+    btn.setAttribute("aria-expanded", "true");
+  }
+
+  function closeTray(card) {
+    const tray = card && card.querySelector(".sticker-tray");
+    if (tray) tray.remove();
+    const btn = card && card.querySelector(".js-stick");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+  }
+
+  // Somewhere near the top right of the post, a little different each time.
+  function stickHere(card, kind) {
+    const r = card.getBoundingClientRect();
+    closeTray(card);
+    drop(r.left + r.width * (0.6 + Math.random() * 0.28), r.top + 36 + Math.random() * 40,
+      { card: card, kind: kind, rot: Math.round(Math.random() * 24 - 12) });
   }
 
   function layerOf(card) {
@@ -595,6 +788,15 @@
 
   function onCarryUp(ev) {
     if (!carry) return;
+    if (!carry.moved && carry.home) {
+      // A tap on a kind in a post's tray: it goes on that post.
+      ev.preventDefault();
+      ev.stopPropagation();
+      swallowClick();
+      const c = endCarry();
+      stickHere(c.home, c.kind);
+      return;
+    }
     if (!carry.moved && !carry.sticky) {
       carry.sticky = true; // a tap on the button: keep holding it until the next one
       return;
@@ -635,10 +837,12 @@
     if (c.from) c.from.el.hidden = false;
   }
 
-  async function drop(x, y) {
-    const c = endCarry();
-    const card = cardAt(x, y);
-    const from = c.from;
+  // `onto` places a sticker on a given post without one in hand (the tray's tap).
+  async function drop(x, y, onto) {
+    const c = onto || endCarry();
+    const card = onto ? onto.card : cardAt(x, y);
+    const from = onto ? null : c.from;
+    if (!onto && c.home) closeTray(c.home);
     try {
       if (!card) {
         if (!from) return;
@@ -664,6 +868,8 @@
       const replaced = [...layer.querySelectorAll(".sticker-placed.is-mine")];
       replaced.forEach((old) => { old.hidden = true; });
       const el = placedSticker(postId, Object.assign({ mine: true }, spot));
+      el.classList.add("is-new");
+      el.addEventListener("animationend", () => el.classList.remove("is-new"), { once: true });
       layer.append(el);
       if (from) {
         from.el.remove();
@@ -685,8 +891,8 @@
 
   function stickerDock() {
     const dock = h("div", { id: "sticker-dock", class: "sticker-dock", role: "group", "aria-label": "Stickers" },
-      Object.keys(STICKERS).map((kind) => h("button", {
-        class: "btn sticker-pick", type: "button", title: STICKERS[kind] + ": pick it up, then let go on a post",
+      KINDS.map((k) => k.id).map((kind) => h("button", {
+        class: "btn sticker-pick", type: "button", title: kindOf(kind).label + ": pick it up, then let go on a post",
         onpointerdown: (ev) => {
           if (carry || ev.button > 0) return;
           ev.preventDefault();
@@ -699,7 +905,7 @@
           startCarry(kind, { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, target: ev.currentTarget }, null);
           carry.sticky = true;
         },
-      }, h("img", { src: stickerSrc(kind), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, STICKERS[kind]))));
+      }, h("img", { src: stickerSrc(kind), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, kindOf(kind).label))));
     return dock;
   }
 
@@ -737,6 +943,8 @@
     if (!user) circle.classList.add("avatar", "avatar-out");
     old.replaceWith(circle);
     $("account-label").textContent = user ? name : "SIGN IN";
+    const settings = $("settings-link");
+    if (settings) settings.hidden = !(user && user.role === "admin" && on("settingsPage"));
     $("account").setAttribute("aria-label", user ? "Signed in as " + name : "Sign in");
     closeMenu();
   }
@@ -814,7 +1022,11 @@
     const attention = h("div", { id: "owner-attention" });
     const dismissed = h("div", { id: "owner-dismissed" });
     let open = false;
-    try { open = sessionStorage.getItem("cymbal_owner_open") === "1"; } catch (_) { /* ignore */ }
+    // Folded away on the feed until opened; on the settings page it's the point, so open.
+    try {
+      const saved = sessionStorage.getItem("cymbal_owner_open");
+      open = PAGE === "settings" ? saved !== "0" : saved === "1";
+    } catch (_) { open = PAGE === "settings"; }
     const details = h("details", { open: open ? true : null },
       h("summary", { id: "owner-title" }, "OWNER PANEL"),
       h("div", { class: "owner-grid" },
@@ -1282,12 +1494,130 @@
     $("playlists").hidden = false;
   }
 
+  // ── listens ───────────────────────────────────────────────────────────────
+  // A player is another site's page in an iframe, so the page can't see clicks in it.
+  // What it can see is focus moving into one: the window blurs and the iframe becomes
+  // the active element. That, or opening the song's own link, counts as a listen,
+  // once per post per page; the server counts each browser once per post.
+  // Counted for everyone whoever can see the count (features.js listenCount).
+
+  const listened = new Set();
+
+  async function heard(card) {
+    const id = card && card.dataset.id;
+    if (!id || listened.has(id)) return;
+    listened.add(id);
+    try {
+      const res = await api("/api/cymbal/posts/" + encodeURIComponent(id) + "/listen", { method: "POST", body: {} });
+      const n = card.querySelector(".js-listens");
+      if (res.counted && n) {
+        const next = Number(n.textContent || 0) + 1;
+        n.textContent = String(next);
+        n.nextSibling.textContent = next === 1 ? " listen" : " listens";
+      }
+    } catch (_) {
+      listened.delete(id);
+    }
+  }
+
+  function checkPlayerFocus() {
+    const el = document.activeElement;
+    if (el && el.tagName === "IFRAME") heard(el.closest("#posts .card[data-id]"));
+  }
+
+  if (onFeed) {
+    window.addEventListener("blur", () => setTimeout(checkPlayerFocus, 0));
+    // From one player straight to another the window doesn't blur again.
+    setInterval(() => { if (!document.hasFocus()) checkPlayerFocus(); }, 1000);
+    $("posts").addEventListener("click", (ev) => {
+      if (ev.target.closest(".track a")) heard(ev.target.closest(".card[data-id]"));
+    });
+  }
+
+  // ── settings page: reacts leaderboard and sticker uploads ─────────────────
+
+  async function loadLeaderboard() {
+    const box = $("leaderboard");
+    if (!box) return;
+    box.hidden = false;
+    let data;
+    try { data = await api("/api/cymbal/owner/leaderboard"); } catch (err) {
+      box.replaceChildren(h("h2", { class: "label" }, "MOST REACTS"), h("p", { class: "status is-error" }, err.message));
+      return;
+    }
+    const rows = data.posts.map((p, i) => h("li", { class: "board-row" },
+      h("span", { class: "board-rank" }, String(i + 1)),
+      h("span", { class: "board-song" },
+        h("strong", null, extLink(p.url, p.title || "Untitled")),
+        h("span", { class: "small" }, (p.artist ? p.artist + " · " : "") + "posted by " + p.poster + " · " + when(p.created))),
+      h("span", { class: "board-reacts", title: p.reacts + (p.reacts === 1 ? " react" : " reacts") },
+        Object.keys(p.kinds).filter((k) => kindOf(k)).map((k) => h("span", { class: "board-kind" },
+          h("img", { src: stickerSrc(k), alt: kindOf(k).label }), p.kinds[k] > 1 ? "×" + p.kinds[k] : null)),
+        h("span", { class: "board-n" }, String(p.reacts))),
+      h("span", { class: "small board-extra" }, "♪ " + p.listens + " · " + p.comments + (p.comments === 1 ? " comment" : " comments"))));
+    box.replaceChildren(h("h2", { class: "label" }, "MOST REACTS"),
+      rows.length ? h("ol", { class: "board" }, rows) : h("p", { class: "small" }, "No reacts yet. Stick something on a post."));
+  }
+
+  async function loadStickerAdmin() {
+    const box = $("sticker-admin");
+    if (!box) return;
+    box.hidden = false;
+    await loadKinds();
+    const status = h("p", { id: "sticker-status", class: "status", role: "status", "aria-live": "polite" });
+    const label = h("input", { id: "sticker-label", type: "text", maxlength: "32", placeholder: "Name, e.g. A blue moon", required: true });
+    const file = h("input", { id: "sticker-file", type: "file", accept: "image/png", required: true });
+    const go = h("button", { class: "btn btn-small btn-primary", type: "submit" }, "UPLOAD");
+    const form = h("form", { class: "sticker-upload", novalidate: true },
+      h("label", { class: "label", for: "sticker-label" }, "STICKER NAME"), label,
+      h("label", { class: "label", for: "sticker-file" }, "PNG ", h("span", { class: "label-note" }, "up to 1 MB; a transparent background works best")), file,
+      h("div", { class: "row" }, go), status);
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const f = file.files && file.files[0];
+      if (label.value.trim().length < 2) { say("sticker-status", "Give it a name.", "error"); label.focus(); return; }
+      if (!f || f.type !== "image/png") { say("sticker-status", "Choose a PNG file.", "error"); return; }
+      if (f.size > 1048576) { say("sticker-status", "That PNG is over 1 MB.", "error"); return; }
+      const body = new FormData();
+      body.append("label", label.value.trim());
+      body.append("image", f);
+      go.disabled = true;
+      say("sticker-status", "Uploading…");
+      try {
+        await api("/api/cymbal/owner/sticker-kinds", { method: "POST", body: body });
+        await loadStickerAdmin();
+        say("sticker-status", "Added. It's in every post's sticker row now.", "ok");
+      } catch (err) {
+        say("sticker-status", err.message, "error");
+      } finally {
+        go.disabled = false;
+      }
+    });
+    const list = h("ul", { class: "kind-list" }, KINDS.map((k) => h("li", { class: "kind" },
+      h("img", { src: stickerSrc(k.id), alt: "" }),
+      h("span", null, k.label),
+      k.uploaded ? h("button", { class: "link-btn", type: "button", onclick: async () => {
+        if (!confirm("Remove the " + k.label + " sticker? It comes off every post it's on.")) return;
+        try {
+          await api("/api/cymbal/owner/sticker-kinds/" + encodeURIComponent(k.id), { method: "DELETE" });
+          await loadStickerAdmin();
+        } catch (err) { say("sticker-status", err.message, "error"); }
+      } }, "remove") : h("span", { class: "small" }, "built in"))));
+    box.replaceChildren(h("h2", { class: "label" }, "STICKERS"), list, form);
+  }
+
   // ── boot ──────────────────────────────────────────────────────────────────
   // Last, on purpose: everything below touches state declared throughout this file.
 
-  loadFeed(true);
-  loadPlaylists();
-  pollTimer = setInterval(() => { if (!document.hidden) refreshTop(); }, 45000);
+  applyFeatures();
+  const kindsReady = loadKinds();
+  if (onFeed) {
+    setupComposer();
+    $("more").addEventListener("click", () => loadFeed(false));
+    kindsReady.then(() => loadFeed(true));
+    loadPlaylists();
+    pollTimer = setInterval(() => { if (!document.hidden) refreshTop(); }, 45000);
+  }
 
   const q = new URLSearchParams(location.search);
   const done = q.get("connected");
@@ -1302,19 +1632,28 @@
   let ownerState = null;
   PBAuth.onChange((user) => {
     const owner = !!user && user.role === "admin";
+    ownerNow = owner;
+    applyFeatures();
     showAccount(user);
     if (user) closeLogin();
-    showStickerDock(owner);
+    showStickerDock(onFeed && owner && !on("stickerButton"));
+    const settingsHere = PAGE === "settings";
+    if ($("settings-locked")) $("settings-locked").hidden = owner;
     if (owner) {
-      loadOwner();
+      // With the settings page on, the owner panel lives there; Apple Music still
+      // drains from the feed page in an authorised browser.
+      if (settingsHere || !on("settingsPage")) loadOwner();
+      else appleAutoStart();
+      if (settingsHere) { loadLeaderboard(); loadStickerAdmin(); }
     } else {
       $("owner").hidden = true;
       $("owner").replaceChildren();
+      ["leaderboard", "sticker-admin"].forEach((id) => { if ($(id)) { $(id).hidden = true; $(id).replaceChildren(); } });
       stopApple();
-      if (user) say("composer-status", "That account isn't Cymbal's owner.", "error");
+      if (user) say(settingsHere ? "owner-login-status" : "composer-status", "That account isn't Cymbal's owner.", "error");
     }
-    // Remove buttons depend on who is looking, so redraw when that changes.
-    if (ownerState !== null && ownerState !== owner) loadFeed(true);
+    // Remove buttons and owner features depend on who is looking, so redraw when that changes.
+    if (onFeed && ownerState !== null && ownerState !== owner) loadFeed(true);
     ownerState = owner;
   });
 })();

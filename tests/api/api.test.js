@@ -152,7 +152,7 @@ test("anyone can read; nobody but the owner reaches the owner routes", async () 
 });
 
 test("the collection API stays closed to everyone but the superuser", async () => {
-  for (const c of ["posts", "comments", "playlist_syncs", "playlist_memberships", "provider_connections", "oauth_states", "stickers"]) {
+  for (const c of ["posts", "comments", "playlist_syncs", "playlist_memberships", "provider_connections", "oauth_states", "stickers", "listens", "sticker_kinds"]) {
     for (const token of [U.member.token, U.owner.token, ""]) {
       const list = await call("GET", "/api/collections/" + c + "/records", { token });
       assert.equal(list.status, 403, c + " list -> " + list.status);
@@ -431,6 +431,82 @@ test("stickers: everyone sees them; only the owner places, moves and removes the
   const after = (await as("owner").get("/api/cymbal/feed")).json.posts;
   assert.deepEqual(after.find((p) => p.id === post.id).stickers.map((s) => [s.kind, s.x, s.y]), [["star", 0.9, 120]]);
   assert.deepEqual(after.find((p) => p.id === other.id).stickers, []);
+});
+
+test("listens: once per browser per post, counted for everyone", async () => {
+  const post = await share("cat", "https://open.spotify.com/track/" + randomSpotifyId(), "have a listen");
+  const path = "/api/cymbal/posts/" + post.id + "/listen";
+  assert.equal(post.listen_count, 0);
+  assert.equal((await call("POST", path, { ip: U.nokey.ip, body: {} })).status, 400, "a browser key is needed");
+  assert.equal((await as("ann").post(path)).json.counted, true);
+  assert.equal((await as("ann").post(path)).json.counted, false, "the same browser again");
+  assert.equal((await as("ben").post(path)).json.counted, true);
+  assert.equal((await as("ann").post("/api/cymbal/posts/aaaaaaaaaaaaaaa/listen")).status, 404);
+  const seen = (await call("GET", "/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
+  assert.equal(seen.listen_count, 2);
+  for (const token of [U.member.token, U.owner.token, ""]) {
+    assert.equal((await call("GET", "/api/collections/listens/records", { token })).status, 403);
+  }
+});
+
+test("the feed carries the first three comments, and whether an account posted", async () => {
+  const post = await share("eve", "https://open.spotify.com/track/" + randomSpotifyId(), "talk amongst yourselves");
+  for (let i = 1; i <= 5; i++) {
+    const r = await as(i % 2 ? "ann" : "ben").post("/api/cymbal/posts/" + post.id + "/comments", { body: "comment " + i, name: "C" + i, request_id: rid() });
+    assert.equal(r.status, 200, r.text);
+  }
+  const seen = (await as("ann").get("/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
+  assert.deepEqual(seen.comments.map((c) => c.body), ["comment 1", "comment 2", "comment 3"]);
+  assert.deepEqual(seen.comments.map((c) => c.mine), [true, false, true]);
+  assert.equal(seen.comment_count, 5);
+  assert.equal(seen.account, false);
+  const r = await as("owner").post("/api/cymbal/posts", { url: "https://open.spotify.com/track/" + randomSpotifyId(), name: "Sol", caption: "", request_id: rid() });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.json.post.account, true, "the owner posted while signed in");
+  assert.ok(!JSON.stringify(r.json).includes(U.owner.id), "never says which account");
+});
+
+test("sticker uploads: the owner adds PNGs, everyone sees them, removing one takes its stickers", async () => {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const upload = async (token, label, bytes, type) => {
+    const fd = new FormData();
+    fd.append("label", label);
+    fd.append("image", new Blob([bytes], { type }), "s.png");
+    const res = await fetch(BASE + "/api/cymbal/owner/sticker-kinds", { method: "POST", headers: token ? { Authorization: token } : {}, body: fd });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  assert.equal((await upload("", "Moon", png, "image/png")).status, 401);
+  assert.equal((await upload(U.member.token, "Moon", png, "image/png")).status, 403);
+  assert.equal((await upload(U.owner.token, "Moon", Buffer.from("not a png"), "text/plain")).status, 400);
+  const moon = await upload(U.owner.token, "Moon", png, "image/png");
+  assert.equal(moon.status, 200, JSON.stringify(moon.json));
+  const kind = moon.json.kind;
+  assert.match(kind.id, /^u_[a-z0-9]{15}$/);
+
+  const kinds = (await call("GET", "/api/cymbal/sticker-kinds")).json.kinds;
+  assert.deepEqual(kinds.map((k) => k.id).slice(0, 2), ["heart", "star"]);
+  const listed = kinds.find((k) => k.id === kind.id);
+  assert.equal(listed.label, "Moon");
+  const img = await fetch(BASE + listed.src);
+  assert.equal(img.status, 200, "anyone can load the image");
+
+  const post = await share("fay", "https://open.spotify.com/track/" + randomSpotifyId(), "moonlight");
+  const stuck = await as("owner").post("/api/cymbal/owner/posts/" + post.id + "/stickers", { kind: kind.id, x: 0.5, y: 30 });
+  assert.equal(stuck.status, 200, stuck.text);
+  assert.equal(stuck.json.sticker.kind, kind.id);
+  assert.equal((await as("owner").post("/api/cymbal/owner/posts/" + post.id + "/stickers", { kind: "u_aaaaaaaaaaaaaaa", x: 0.5, y: 30 })).status, 400);
+
+  const board = await as("owner").get("/api/cymbal/owner/leaderboard");
+  assert.equal(board.status, 200, board.text);
+  const row = board.json.posts.find((p) => p.id === post.id);
+  assert.deepEqual([row.reacts, row.kinds[kind.id]], [1, 1]);
+  assert.equal((await call("GET", "/api/cymbal/owner/leaderboard", { token: U.member.token })).status, 403);
+
+  assert.equal((await call("DELETE", "/api/cymbal/owner/sticker-kinds/" + kind.id, { token: U.member.token })).status, 403);
+  assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + kind.id)).status, 200);
+  assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + kind.id)).status, 404);
+  const after = (await call("GET", "/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
+  assert.deepEqual(after.stickers, []);
 });
 
 test("clear the stage before providers connect", async () => {

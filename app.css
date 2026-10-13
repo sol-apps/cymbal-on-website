@@ -476,3 +476,72 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .is-sticking, .is-sticking * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; touch-action: none; }
 .is-sticking iframe { pointer-events: none; }
 .card.sticker-target { outline: 3px dashed var(--accent); outline-offset: 3px; }
+
+/* ── owner-only features (features.js puts ff-<name> on <html>) ────────── */
+
+/* smallStickers: 20% smaller everywhere a sticker is drawn on a post. */
+.ff-smallStickers .sticker { width: 51px; }
+.ff-smallStickers .sticker-carry { width: 58px; }
+
+/* stickerMotion: slapped down, lifted when picked up, a wiggle under the pointer. */
+.ff-stickerMotion .sticker-placed.is-new { animation: sticker-slap .45s cubic-bezier(.2, .9, .3, 1.3); }
+.ff-stickerMotion .sticker-carry { scale: 1.12; animation: sticker-lift .18s ease-out; }
+.ff-stickerMotion .sticker-placed.is-mine:hover { animation: sticker-wiggle .5s ease-in-out; }
+.ff-stickerMotion .sticker-pick:hover img { animation: sticker-wiggle .5s ease-in-out; }
+@keyframes sticker-slap {
+  0% { scale: 1.7; opacity: 0; filter: drop-shadow(10px 14px 6px rgba(0, 0, 0, .25)); }
+  55% { scale: .9; opacity: 1; }
+  78% { scale: 1.06; }
+  100% { scale: 1; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .25)); }
+}
+@keyframes sticker-lift { from { scale: 1; } to { scale: 1.12; } }
+@keyframes sticker-wiggle {
+  0%, 100% { rotate: 0deg; }
+  25% { rotate: -7deg; }
+  75% { rotate: 7deg; }
+}
+
+/* plusComment, stickerButton: the card's small buttons. */
+.btn.btn-tiny { font-size: 8px; min-height: 34px; padding: 5px 9px; gap: 5px; }
+.stick-icon { width: 16px; height: 16px; object-fit: contain; margin: -2px 0; }
+.sticker-tray { display: flex; flex-wrap: wrap; gap: 8px; }
+.sticker-tray .sticker-pick { width: 50px; height: 50px; }
+.sticker-tray .sticker-pick img { width: 34px; height: 34px; }
+
+/* listenCount */
+.listens { white-space: nowrap; }
+
+/* openComments: the first three show; the rest wait behind SHOW N MORE. */
+.comment-list.is-folded > li:nth-child(n + 4) { display: none; }
+.more-comments { justify-self: start; color: var(--ink); }
+
+/* accountAvatars: posted without an account, so an outline instead of a letter. */
+.avatar-anon::before { top: 4px; width: 10px; height: 10px; }
+.avatar-anon::after { top: 16px; width: 20px; height: 14px; }
+
+/* settings page */
+.settings { display: grid; gap: 14px; padding-top: 14px; }
+.settings > *, .leaderboard > *, .sticker-admin > *, .sticker-upload > * { min-width: 0; }
+.settings .owner { margin-top: 0; }
+.leaderboard, .sticker-admin { display: grid; gap: 10px; }
+.board { list-style: none; padding: 0; display: grid; gap: 8px; }
+.board-row {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center;
+  border: 2px solid var(--line); border-radius: var(--radius); padding: 8px 10px; background: var(--panel-2);
+}
+.board-rank { font-family: var(--label); font-size: 11px; }
+.board-song { display: grid; min-width: 0; }
+.board-song strong { overflow-wrap: anywhere; }
+.board-song a { text-decoration: none; }
+.board-reacts { display: flex; gap: 6px; align-items: center; font-weight: 700; }
+.board-kind { display: inline-flex; align-items: center; font-size: 12px; }
+.board-kind img { width: 24px; height: 24px; object-fit: contain; }
+.board-n { font-family: var(--label); font-size: 11px; }
+.board-extra { grid-column: 2 / -1; }
+.kind-list { list-style: none; padding: 0; display: grid; gap: 8px; }
+.kind { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+.kind img { width: 40px; height: 40px; object-fit: contain; }
+.kind > span:first-of-type { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.sticker-upload { display: grid; gap: 4px; border-top: 2px dashed var(--line); padding-top: 10px; }
+.sticker-upload input[type="file"] { font: inherit; font-size: 13px; margin-bottom: 6px; max-width: 100%; }
+.sticker-upload .row { display: flex; justify-content: flex-end; }
