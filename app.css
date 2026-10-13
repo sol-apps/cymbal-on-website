@@ -730,19 +730,17 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .pill-form .status:empty { display: none; }
 
 /* Signed in, each post's actions are a chunky speech bubble with the posts' own hard
- * shadow, the stickers beside it, and a + at the end for submitting your own sticker,
+ * shadow, the stickers beside it, and a small round + at the end for submitting your own sticker,
  * all the same size on one line. The bubble turns red while its box is open. The
  * pictures carry their colours, so dark mode has its own (an orange fill, so the bubble
  * still reads on the dark panel). */
 .comment-btn, .sticker-add {
   --bubble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%232b2b29' transform='translate%282 2%29'/%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23fff2d6' stroke='%232b2b29' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
   --bubble-open: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%232b2b29' transform='translate%282 2%29'/%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23D56062' stroke='%232b2b29' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
-  --add: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M6 4h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%232b2b29' transform='translate%282 2%29'/%3E%3Cpath d='M6 4h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23fff2d6' stroke='%232b2b29' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M12 9v8M8 13h8' stroke='%232b2b29' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 [data-theme="dark"] .comment-btn, [data-theme="dark"] .sticker-add {
   --bubble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%231b1b1a' transform='translate%282 2%29'/%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23FFB84D' stroke='%231b1b1a' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
   --bubble-open: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%231b1b1a' transform='translate%282 2%29'/%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23ff9aa0' stroke='%231b1b1a' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
-  --add: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M6 4h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%231b1b1a' transform='translate%282 2%29'/%3E%3Cpath d='M6 4h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23FFB84D' stroke='%231b1b1a' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M12 9v8M8 13h8' stroke='%231b1b1a' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 .comment-btn {
   width: 29px; height: 29px; padding: 0; margin-left: -2px; border: 0; background: transparent;
@@ -758,13 +756,22 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 
 /* The stickers beside it: no buttons around them, each at its own slight angle. The +
  * at the end sits the same distance from the last sticker as they do from each other. */
-.card-actions .sticker-tray { margin: 0 0 0 3px; gap: 2px; }
+.card-actions .sticker-tray { margin: 0 0 0 3px; gap: 0; }
 .card-actions .sticker-tray .sticker-pick { width: 29px; height: 29px; padding: 3px; }
 .card-actions .sticker-tray .sticker-pick:hover { background: transparent; }
 .card-actions .sticker-tray .sticker-pick img { rotate: var(--lean, 0deg); width: 23px; height: 23px; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .2)); transition: transform .15s ease-out; }
 .card-actions .sticker-tray .sticker-pick:hover img { transform: translateY(-2px) scale(1.06); }
-.sticker-add { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 6px; }
-.sticker-add::before { content: ""; width: 21px; height: 21px; background: var(--add) center / contain no-repeat; transition: scale .15s ease-out; }
+.sticker-add { position: relative; width: 29px; height: 29px; display: grid; place-items: center; color: var(--ink); }
+.sticker-add::before {
+  content: ""; width: 22px; height: 22px; border-radius: 50%; box-sizing: border-box;
+  border: 1.5px solid color-mix(in srgb, var(--line) 30%, transparent); background: var(--panel-2);
+  transition: scale .15s ease-out;
+}
+.sticker-add::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; translate: -50% -50%;
+  background: linear-gradient(currentColor 0 0) center / 100% 1.6px no-repeat,
+    linear-gradient(currentColor 0 0) center / 1.6px 100% no-repeat;
+}
 
 /* Opening: the box eases out from the icon. Transforms and opacity only, so it stays
  * smooth on a phone with players on the page. */
