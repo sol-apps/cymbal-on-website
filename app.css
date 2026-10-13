@@ -748,9 +748,10 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 }
 .comment-btn::before {
   content: ""; width: 23px; height: 23px; background: var(--bubble) center / contain no-repeat;
+  translate: 0 -1px; /* its shadow makes it read low; this centres its body on the stickers */
   transition: scale .15s ease-out;
 }
-.comment-btn:active::before, .sticker-add:active::before { scale: .9; }
+.comment-btn:active::before { scale: .9; }
 .comment-btn[aria-expanded="true"]::before { background-image: var(--bubble-open); }
 .comment-btn span { display: none; }
 
@@ -761,17 +762,19 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .card-actions .sticker-tray .sticker-pick:hover { background: transparent; }
 .card-actions .sticker-tray .sticker-pick img { rotate: var(--lean, 0deg); width: 23px; height: 23px; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .2)); transition: transform .15s ease-out; }
 .card-actions .sticker-tray .sticker-pick:hover img { transform: translateY(-2px) scale(1.06); }
-.sticker-add { position: relative; width: 29px; height: 29px; display: grid; place-items: center; color: var(--ink); }
-.sticker-add::before {
-  content: ""; width: 22px; height: 22px; border-radius: 50%; box-sizing: border-box;
+.sticker-add {
+  position: relative; box-sizing: border-box; width: 19px; height: 19px; margin: 0 3px 0 6px; border-radius: 50%;
+  align-self: center; flex: none;
   border: 1.5px solid color-mix(in srgb, var(--line) 30%, transparent); background: var(--panel-2);
-  transition: scale .15s ease-out;
+  color: var(--ink); transition: scale .15s ease-out;
 }
-.sticker-add::after {
-  content: ""; position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; translate: -50% -50%;
-  background: linear-gradient(currentColor 0 0) center / 100% 1.6px no-repeat,
-    linear-gradient(currentColor 0 0) center / 1.6px 100% no-repeat;
+/* The + is drawn with two bars, like the old comment +, so it sits dead centre. */
+.sticker-add::before, .sticker-add::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 1.5px;
+  border-radius: 1px; background: currentColor; translate: -50% -50%;
 }
+.sticker-add::after { rotate: 90deg; }
+.sticker-add:active { scale: .9; }
 
 /* Opening: the box eases out from the icon. Transforms and opacity only, so it stays
  * smooth on a phone with players on the page. */
@@ -783,7 +786,7 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   from { opacity: 0; transform: translateY(-4px) scale(.96, .9); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .comments.is-opening .pill-form, .comment-btn::before, .sticker-add::before { animation: none; transition: none; }
+  .comments.is-opening .pill-form, .comment-btn::before, .sticker-add { animation: none; transition: none; }
 }
 
 /* compactCards: the name and time sit a touch in from the card's edge (Sol's call: 5px
