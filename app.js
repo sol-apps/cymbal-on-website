@@ -378,8 +378,9 @@
     const title = p.title || (p.unavailable ? "Couldn't look this one up" : (p.resolving && !stale ? "Finding the track details…" : fallback));
     const count = p.comment_count || 0;
     const compact = on("compactCards");
-    // Signed in: a small comment icon with the stickers in a row beside it.
-    const merged = on("stickerButton") && on("openComments") && memberNow;
+    // Signed in (or signed out, with outBubble): a small comment icon with the stickers
+    // in a row beside it.
+    const merged = on("stickerButton") && on("openComments") && (memberNow || on("outBubble"));
     const remove = p.can_delete ? (compact
       ? h("button", { class: "btn-x", type: "button", title: "Remove this post", "aria-label": "Remove this post", onclick: () => removePost(p.id) }, "✕")
       : h("button", { class: "btn-remove", type: "button", onclick: () => removePost(p.id) },
@@ -753,6 +754,7 @@
         onpointerdown: (ev) => {
           if (carry || ev.button > 0) return;
           ev.preventDefault();
+          if (!memberNow) return askToSignIn("Sign in or make an account to stick stickers on posts.");
           const pick = ev.currentTarget;
           startCarry(k.id, ev, null);
           carry.home = card;
@@ -761,6 +763,7 @@
         },
         onclick: (ev) => {
           if (carry || ev.detail !== 0) return; // keyboard: stick it here
+          if (!memberNow) return askToSignIn("Sign in or make an account to stick stickers on posts.");
           stickHere(card, k.id);
         },
       }, h("img", { src: stickerSrc(k.id), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, k.label))));
@@ -1076,6 +1079,14 @@
     img.id = "account-avatar";
     img.classList.add("account-avatar");
     old.replaceWith(img);
+  }
+
+  // Something that needs an account was tapped while signed out: open the sign-in form
+  // with a line saying why.
+  function askToSignIn(why) {
+    if ($("owner-login").hidden) $("account").click();
+    $("owner-login").scrollIntoView({ block: "nearest", behavior: "smooth" });
+    say("owner-login-status", why);
   }
 
   $("account").addEventListener("click", () => {

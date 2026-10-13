@@ -25,4 +25,8 @@ const FEATURES = {
                               // playlist chips, smaller caption and title, flatter buttons
   pillComments: "all",        // the comment box looks like a message box: one line that grows,
                               // a small send button, and a small name box only when signed out
+  outBubble: "off",           // signed out, posts get the same comment bubble and sticker row as
+                              // signed in (needs stickerButton and openComments on for them too);
+                              // tapping a sticker asks them to sign in. Only "all" reaches anyone
+                              // signed out, so "members" or "owner" changes nothing
 };
