@@ -378,7 +378,7 @@
     const title = p.title || (p.unavailable ? "Couldn't look this one up" : (p.resolving && !stale ? "Finding the track details…" : fallback));
     const count = p.comment_count || 0;
     const compact = on("compactCards");
-    // With stickers, one button opens the comment box with the stickers inside it.
+    // Signed in: a small comment icon with the stickers in a row beside it.
     const merged = on("stickerButton") && on("openComments") && memberNow;
     const remove = p.can_delete ? (compact
       ? h("button", { class: "btn-x", type: "button", title: "Remove this post", "aria-label": "Remove this post", onclick: () => removePost(p.id) }, "✕")
@@ -407,15 +407,16 @@
       compact ? null : syncChips(p),
       h("div", { class: "card-actions" },
         h("button", {
-          class: merged ? "plus-btn js-toggle stick-btn" : "btn btn-small js-toggle" + (on("plusComment") ? " btn-tiny" : ""), type: "button",
+          class: merged ? "comment-btn js-toggle" : "btn btn-small js-toggle" + (on("plusComment") ? " btn-tiny" : ""), type: "button",
           "aria-expanded": "false", "aria-controls": "c-" + p.id,
-          "aria-label": merged ? "Comment or stick a sticker on this post" : null,
-          title: merged ? "Comment or stick a sticker" : null,
+          "aria-label": merged ? "Comment on this post" : null,
+          title: merged ? "Comment" : null,
           onclick: (ev) => (on("openComments") ? toggleCommentForm : toggleComments)(ev.currentTarget.closest(".card"), p.id),
-        }, h("span", { class: "js-count-label", "aria-hidden": merged ? "true" : null }, merged ? "+" : commentLabel(count))),
+        }, h("span", { class: "js-count-label", "aria-hidden": merged ? "true" : null }, merged ? "" : commentLabel(count))),
         compact ? null : remove),
       h("div", { class: "comments", id: "c-" + p.id, hidden: true }),
       p.stickers && p.stickers.length ? stickerLayer(p) : null);
+    if (merged) card.querySelector(".comment-btn").after(stickerTray(card, p.id));
     if (on("openComments")) fillThread(card, p);
     return card;
   }
@@ -522,7 +523,7 @@
     const n = Math.max(0, Number(card.dataset.count || 0) + delta);
     card.dataset.count = n;
     const label = card.querySelector(".js-count-label");
-    if (!card.querySelector(".plus-btn")) label.textContent = commentLabel(n);
+    if (!card.querySelector(".comment-btn")) label.textContent = commentLabel(n);
     if (on("openComments")) foldButton(card);
   }
 
@@ -582,8 +583,6 @@
     const open = box.querySelector("form");
     if (open) {
       open.remove();
-      const tray = box.querySelector(".sticker-tray");
-      if (tray) tray.remove();
       btn.setAttribute("aria-expanded", "false");
       box.hidden = !box.querySelector(".comment-list").children.length;
       return;
@@ -594,8 +593,6 @@
       box.prepend(list);
     }
     const form = commentForm(postId, list, card);
-    // Signed in, the stickers float right there above the box: no separate button.
-    if (btn.classList.contains("stick-btn")) box.append(stickerTray(card));
     box.append(form);
     box.hidden = false;
     btn.setAttribute("aria-expanded", "true");
@@ -745,7 +742,7 @@
   // let go. Picked up, it leaves its spot in the row empty until it's let go, as if
   // it had really been peeled off.
 
-  function stickerTray(card) {
+  function stickerTray(card, postId) {
     const tray = h("div", { class: "sticker-tray", role: "group", "aria-label": "Stick a sticker on this post" },
       KINDS.map((k) => h("button", {
         class: "sticker-pick", type: "button", title: k.label + ": tap to stick it here, or drag it",
@@ -763,10 +760,12 @@
           stickHere(card, k.id);
         },
       }, h("img", { src: stickerSrc(k.id), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, k.label))));
-    // Each sticker sits at its own slight angle, fresh every time the box opens.
+    // Each sticker sits at its own slight angle, different on every post but the same
+    // each time the post is drawn (the feed refreshes, and they mustn't twitch).
     [...tray.children].forEach((b, i) => {
-      b.style.setProperty("--i", i);
-      b.style.setProperty("--lean", Math.round(Math.random() * 20 - 10) + "deg");
+      let n = 0;
+      for (const ch of postId + KINDS[i].id) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
+      b.style.setProperty("--lean", (n % 21) - 10 + "deg");
     });
     return tray;
   }
