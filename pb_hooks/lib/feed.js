@@ -19,7 +19,12 @@ const STATE = { pending: "pending", pending_device: "pending", synced: "synced",
 const LIMITS = {
   posts: { key: 10, ip: 30, noun: "posts" },
   comments: { key: 60, ip: 180, noun: "comments" },
+  listens: { key: 300, ip: 900, noun: "listens" },
 };
+
+// Comments that come with each post in the feed, so a card can show the start of its
+// thread without asking again. The rest are one request away.
+const PREVIEW = 3;
 
 function util() {
   return require(__hooks + "/lib/util.js");
@@ -70,10 +75,13 @@ function postView(rec, syncs, keyHash, owner) {
     embed_id: rec.getString("embed_id"),
     caption: rec.getString("caption"),
     poster: rec.getString("pseudonym") || "someone",
+    // Posted while signed in. Says only that an account wrote it, never which one.
+    account: !!rec.getString("author"),
     mine: mine,
     can_delete: mine || owner,
     created: rec.getString("created"),
     comment_count: rec.getInt("comment_count"),
+    listen_count: rec.getInt("listen_count"),
     resolving: meta === "pending",
     unavailable: meta === "failed",
     sync: syncView(syncs),
@@ -86,11 +94,32 @@ function views(app, rows, e) {
   const keyHash = u.writerKey(e, false);
   const syncs = syncsByPost(app, rows.map((r) => r.id));
   const stickers = require(__hooks + "/lib/stickers.js").byPost(app, rows.map((r) => r.id), owner);
+  const comments = commentPreviews(app, rows, keyHash, owner);
   return rows.map((r) => {
     const v = postView(r, syncs[r.id], keyHash, owner);
     v.stickers = stickers[r.id] || [];
+    v.comments = comments[r.id] || [];
     return v;
   });
+}
+
+// The first PREVIEW comments of each post that has any, oldest first.
+function commentPreviews(app, rows, keyHash, owner) {
+  const out = {};
+  const ids = rows.filter((r) => r.getInt("comment_count") > 0).map((r) => r.id);
+  if (!ids.length) return out;
+  app.findAllRecords("comments", $dbx.in("post", ...ids), $dbx.hashExp({ deleted: false })).forEach((c) => {
+    if (!c) return;
+    const p = c.getString("post");
+    (out[p] = out[p] || []).push(c);
+  });
+  Object.keys(out).forEach((p) => {
+    out[p] = out[p]
+      .sort((a, b) => (a.getString("created") + a.id < b.getString("created") + b.id ? -1 : 1))
+      .slice(0, PREVIEW)
+      .map((c) => commentView(c, keyHash, owner));
+  });
+  return out;
 }
 
 function livePost(app, id) {
@@ -164,6 +193,7 @@ function createPost(app, e) {
       const now = u.pbTime(Date.now());
       const post = new Record(tx.findCollectionByNameOrId("posts"));
       post.set("pseudonym", name);
+      if (u.isOwner(e)) post.set("author", e.auth.id);
       post.set("author_key", keyHash);
       post.set("ip_hash", ip);
       post.set("source_provider", parsed.provider);
@@ -342,6 +372,36 @@ function deleteComment(app, e, id) {
   return { ok: true };
 }
 
+// POST /api/cymbal/posts/{id}/listen — this browser played with the post's player.
+// Counted once per browser per post, however often it plays.
+function listen(app, e, postId) {
+  const u = util();
+  const keyHash = u.writerKey(e, true);
+  const post = livePost(app, postId);
+  if (u.findOne(app, "listens", "post = {:p} && author_key = {:k}", { p: post.id, k: keyHash })) {
+    return { counted: false };
+  }
+  const ip = u.ipHash(e);
+  try {
+    app.runInTransaction((tx) => {
+      limit(tx, "listens", keyHash, ip);
+      const l = new Record(tx.findCollectionByNameOrId("listens"));
+      l.set("post", post.id);
+      l.set("author_key", keyHash);
+      l.set("ip_hash", ip);
+      tx.save(l);
+      const p = tx.findRecordById("posts", post.id);
+      p.set("listen_count", tx.countRecords("listens", $dbx.hashExp({ post: post.id })));
+      tx.save(p);
+    });
+  } catch (err) {
+    // Two tabs racing: the loser hits the unique index, and the listen is counted.
+    if (u.findOne(app, "listens", "post = {:p} && author_key = {:k}", { p: post.id, k: keyHash })) return { counted: false };
+    throw err;
+  }
+  return { counted: true };
+}
+
 // GET /api/cymbal/playlists — the three public links, once they exist.
 function playlists(app) {
   const u = util();
@@ -361,5 +421,6 @@ module.exports = {
   listComments: listComments,
   createComment: createComment,
   deleteComment: deleteComment,
+  listen: listen,
   playlists: playlists,
 };

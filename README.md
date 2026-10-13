@@ -35,3 +35,19 @@ signed in, a red heart and a silver star sit in the bottom corner. Pick one up (
 it, or tap it and then tap where it goes) and let go on a post to stick it there.
 It's one sticker each per post, so a second one takes the first one's place. A placed
 sticker can be picked up again and moved; dropping it anywhere off a post takes it off.
+
+## Trying things out first
+
+New features can be switched on for the owner only, so they can be tried on the live
+site before anyone else sees them. `features.js` lists each one as `"owner"`, `"all"` or
+`"off"`; changing a word there is how a feature goes out to everyone. Anything a feature
+changes on the server is still checked there, whatever that file says.
+
+Owner-only for now: sticker animation, smaller stickers, a STICKER button on each post,
+a smaller + COMMENT button, comments shown on every post (folded after three), listen
+counts, letter avatars only on posts made from an account, and the settings page
+(`settings.html`: the owner panel, the posts with the most reacts, and uploading PNGs
+as new stickers).
+
+Listens are counted for everyone even while only the owner sees the numbers: clicking
+into a post's player, or opening its song link, counts once per browser per post.

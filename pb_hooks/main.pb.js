@@ -52,6 +52,15 @@ routerAdd("DELETE", "/api/cymbal/comments/{id}", (e) => {
   return e.json(200, feed.deleteComment(e.app, e, e.request.pathValue("id")));
 });
 
+routerAdd("POST", "/api/cymbal/posts/{id}/listen", (e) => {
+  const feed = require(__hooks + "/lib/feed.js");
+  return e.json(200, feed.listen(e.app, e, e.request.pathValue("id")));
+});
+
+routerAdd("GET", "/api/cymbal/sticker-kinds", (e) => {
+  return e.json(200, require(__hooks + "/lib/stickers.js").kinds(e.app));
+});
+
 routerAdd("GET", "/api/cymbal/playlists", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.playlists(e.app));
@@ -165,6 +174,21 @@ routerAdd("POST", "/api/cymbal/owner/stickers/{id}/move", (e) => {
 routerAdd("DELETE", "/api/cymbal/owner/stickers/{id}", (e) => {
   require(__hooks + "/lib/util.js").requireOwner(e);
   return e.json(200, require(__hooks + "/lib/stickers.js").remove(e.app, e.request.pathValue("id")));
+}, $apis.requireAuth("users"));
+
+routerAdd("POST", "/api/cymbal/owner/sticker-kinds", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").addKind(e.app, e));
+}, $apis.requireAuth("users"));
+
+routerAdd("DELETE", "/api/cymbal/owner/sticker-kinds/{id}", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").removeKind(e.app, e.request.pathValue("id")));
+}, $apis.requireAuth("users"));
+
+routerAdd("GET", "/api/cymbal/owner/leaderboard", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").leaderboard(e.app));
 }, $apis.requireAuth("users"));
 
 // ── the worker ──────────────────────────────────────────────────────────────
