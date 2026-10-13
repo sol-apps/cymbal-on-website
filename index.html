@@ -28,6 +28,7 @@
     <div class="wrap top-inner">
       <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span>CYMBAL <span class="brand-sub">ON WEBSITE</span></h1>
       <div class="top-actions">
+        <a id="misc-link" class="btn btn-small" href="misc.html" hidden>MISC</a>
         <button id="theme" class="btn btn-small" type="button">DARK</button>
         <div class="account">
           <button id="account" class="btn btn-small account-btn" type="button" aria-expanded="false" aria-label="Sign in">
@@ -35,7 +36,6 @@
             <span id="account-label" class="account-label" aria-hidden="true">SIGN IN</span>
           </button>
           <div id="account-menu" class="panel account-menu" hidden>
-            <a id="settings-link" class="btn btn-small" href="settings.html" hidden>SETTINGS</a>
             <button id="signout" class="btn btn-small" type="button">SIGN OUT</button>
           </div>
         </div>
@@ -75,7 +75,10 @@
     </nav>
 
     <form id="owner-login" class="panel owner-login" hidden novalidate>
-      <label for="owner-email" class="label">OWNER EMAIL</label>
+      <p id="owner-login-title" class="label">SIGN IN</p>
+      <label for="owner-name" class="label" hidden>YOUR NAME</label>
+      <input id="owner-name" name="name" type="text" autocomplete="nickname" maxlength="32" hidden>
+      <label for="owner-email" class="label">EMAIL</label>
       <input id="owner-email" name="email" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" required>
       <label for="owner-password" class="label">PASSWORD</label>
       <input id="owner-password" name="password" type="password" autocomplete="current-password" required>
@@ -83,6 +86,7 @@
         <button id="owner-login-cancel" class="btn btn-small btn-quiet" type="button">CANCEL</button>
         <button id="owner-login-go" class="btn btn-small" type="submit">SIGN IN</button>
       </div>
+      <button id="owner-login-mode" class="link-btn" type="button">New here? Make an account</button>
       <p id="owner-login-status" class="status" role="status" aria-live="polite"></p>
     </form>
 

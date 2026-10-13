@@ -152,7 +152,7 @@ test("anyone can read; nobody but the owner reaches the owner routes", async () 
 });
 
 test("the collection API stays closed to everyone but the superuser", async () => {
-  for (const c of ["posts", "comments", "playlist_syncs", "playlist_memberships", "provider_connections", "oauth_states", "stickers", "listens", "sticker_kinds"]) {
+  for (const c of ["posts", "comments", "playlist_syncs", "playlist_memberships", "provider_connections", "oauth_states", "stickers", "listens", "sticker_kinds", "profiles", "signups"]) {
     for (const token of [U.member.token, U.owner.token, ""]) {
       const list = await call("GET", "/api/collections/" + c + "/records", { token });
       assert.equal(list.status, 403, c + " list -> " + list.status);
@@ -162,7 +162,7 @@ test("the collection API stays closed to everyone but the superuser", async () =
   }
 });
 
-test("identity: a signed-in person cannot make themselves owner, and nobody can sign up", async () => {
+test("identity: a signed-in person cannot make themselves owner, nor sign up through the collection API", async () => {
   const r = await call("PATCH", "/api/collections/users/records/" + U.member.id, { token: U.member.token, body: { role: "admin" } });
   assert.notEqual(r.status, 200);
   const me = await su("GET", "/api/collections/users/records/" + U.member.id);
@@ -171,6 +171,38 @@ test("identity: a signed-in person cannot make themselves owner, and nobody can 
     const signup = await call("POST", "/api/collections/users/records", { token, body: { email: "x@cymbal.invalid", password: "abcdefgh1", passwordConfirm: "abcdefgh1", role: "admin" } });
     assert.notEqual(signup.status, 200, "no self-service accounts");
   }
+});
+
+test("sign-up: anyone makes an account and is signed in to it, never as the owner", async () => {
+  const ip = "203.0.113.50";
+  const email = "newbie-" + crypto.randomBytes(4).toString("hex") + "@cymbal.invalid";
+  const bad = [
+    [{ email: "nope", password: "long-enough-1", name: "Nia" }, 400],
+    [{ email, password: "short", name: "Nia" }, 400],
+    [{ email, password: "long-enough-1", name: "N" }, 400],
+  ];
+  for (const [body, status] of bad) assert.equal((await call("POST", "/api/cymbal/signup", { ip, body })).status, status, JSON.stringify(body));
+
+  const made = await call("POST", "/api/cymbal/signup", { ip, body: { email, password: "long-enough-1", name: "Nia", role: "admin" } });
+  assert.equal(made.status, 200, made.text);
+  assert.ok(made.json.token);
+  assert.equal(made.json.record.role, "user", "sign-up never makes an owner");
+  assert.equal(made.json.record.name, "Nia");
+  assert.equal((await call("GET", "/api/cymbal/owner/status", { token: made.json.token })).status, 403);
+  const login = await call("POST", "/api/collections/users/auth-with-password", { body: { identity: email, password: "long-enough-1" } });
+  assert.equal(login.status, 200, "and can sign in again later");
+
+  const again = await call("POST", "/api/cymbal/signup", { ip, body: { email: email.toUpperCase(), password: "long-enough-1", name: "Nia" } });
+  assert.equal(again.status, 400, "one account per email");
+  assert.match(again.json.message, /already/);
+
+  for (let i = 0; i < 4; i++) {
+    const r = await call("POST", "/api/cymbal/signup", { ip, body: { email: "flood" + i + "-" + email, password: "long-enough-1", name: "Flood" } });
+    assert.equal(r.status, 200, r.text);
+  }
+  const sixth = await call("POST", "/api/cymbal/signup", { ip, body: { email: "flood9-" + email, password: "long-enough-1", name: "Flood" } });
+  assert.equal(sixth.status, 429, "five new accounts an hour per network");
+  assert.ok(!made.text.includes("signup_ip") && !made.text.includes("password"));
 });
 
 test("identity: the owner signs in with a PocketBase password; there is no SSO", async () => {
@@ -247,7 +279,7 @@ test("a post is one post and three sync rows; replaying from the same browser re
   assert.equal(p.artist, "Queen");
   assert.equal(p.poster, "Ann");
   assert.equal(p.mine, true);
-  assert.equal(p.can_delete, true);
+  assert.equal(p.can_delete, false, "only the owner removes posts");
   const all = await rows(p.id);
   assert.equal(Object.keys(all).length, 3);
   assert.equal(all.spotify.target_id, SP.bohemian);
@@ -315,7 +347,7 @@ test("rate limits per browser: ten posts an hour, and deleting one does not buy 
   for (let i = 0; i < 10; i++) mine.push(await share("dan", spUrl(randomSpotifyId())));
   const eleventh = await as("dan").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()), name: "Dan", request_id: rid() });
   assert.equal(eleventh.status, 429);
-  assert.equal((await as("dan").del("/api/cymbal/posts/" + mine[0].id)).status, 200);
+  assert.equal((await as("owner").del("/api/cymbal/posts/" + mine[0].id)).status, 200);
   const twelfth = await as("dan").post("/api/cymbal/posts", { url: spUrl(randomSpotifyId()), name: "Dan", request_id: rid() });
   assert.equal(twelfth.status, 429);
 });
@@ -363,9 +395,11 @@ test("comments: named, replay-safe, counted and rate limited per browser", async
   assert.equal(rec.json.comment_count, 61, "ben's one and cat's sixty");
 });
 
-test("only the writing browser or the owner removes a post or comment", async () => {
+test("only the owner removes a post or comment", async () => {
   const postId = P.annFirst.id;
   assert.equal((await as("ben").del("/api/cymbal/posts/" + postId)).status, 403);
+  assert.equal((await as("ann").del("/api/cymbal/posts/" + postId)).status, 403, "not even the browser that wrote it");
+  assert.equal((await as("ben").del("/api/cymbal/comments/" + P.benComment)).status, 403, "nor a comment's writer");
   assert.equal((await call("DELETE", "/api/cymbal/posts/" + postId)).status, 403, "no key, no session");
   assert.equal((await call("DELETE", "/api/cymbal/posts/" + postId, { token: U.member.token })).status, 403, "a non-owner session");
   assert.equal((await as("ann").del("/api/cymbal/comments/" + P.benComment)).status, 403);
@@ -373,30 +407,31 @@ test("only the writing browser or the owner removes a post or comment", async ()
   assert.equal((await as("owner").del("/api/cymbal/posts/" + P.benBohemian.id)).status, 200, "the owner moderates posts");
   const ownerView = (await as("owner").get("/api/cymbal/feed")).json.posts;
   assert.ok(ownerView.every((p) => p.can_delete === true), "the owner can remove anything");
-  assert.equal((await as("ann").del("/api/cymbal/posts/" + postId)).status, 200);
+  const annView = (await as("ann").get("/api/cymbal/feed")).json.posts;
+  assert.ok(annView.every((p) => p.can_delete === false), "nobody else can remove anything");
+  assert.equal((await as("owner").del("/api/cymbal/posts/" + postId)).status, 200);
   const feed = await as("ben").get("/api/cymbal/feed");
   assert.ok(!feed.json.posts.some((p) => p.id === postId));
   assert.equal((await as("ben").get("/api/cymbal/posts/" + postId + "/comments")).status, 404);
   const rec = await su("GET", "/api/collections/posts/records/" + postId);
   assert.equal(rec.json.caption, "");
   assert.equal(rec.json.deleted, true);
-  assert.equal(rec.json.deleted_by, "author");
+  assert.equal(rec.json.deleted_by, "admin");
   const all = await rows(postId);
   assert.ok(Object.values(all).every((r) => r.status === "cancelled" || r.status === "synced"));
 });
 
-test("stickers: everyone sees them; only the owner places, moves and removes them, one per post", async () => {
+test("stickers: everyone sees them; anyone signed in places one per post and moves only their own", async () => {
   const post = await share("cat", "https://open.spotify.com/track/" + randomSpotifyId(), "stick something on this");
-  const path = "/api/cymbal/owner/posts/" + post.id + "/stickers";
+  const path = "/api/cymbal/posts/" + post.id + "/stickers";
   assert.equal((await call("POST", path, { key: U.ann.key, body: { kind: "heart", x: 0.5, y: 10 } })).status, 401, "no session");
-  assert.equal((await call("POST", path, { token: U.member.token, body: { kind: "heart", x: 0.5, y: 10 } })).status, 403, "a non-owner session");
 
   const heart = await as("owner").post(path, { kind: "heart", x: 0.25, y: 40, rot: -8 });
   assert.equal(heart.status, 200, heart.text);
   assert.deepEqual(Object.keys(heart.json.sticker).sort(), ["id", "kind", "mine", "rot", "x", "y"]);
   assert.equal((await as("owner").post(path, { kind: "skull", x: 0.5, y: 1 })).status, 400);
   assert.equal((await as("owner").post(path, { kind: "heart", x: "left", y: 1 })).status, 400);
-  assert.equal((await as("owner").post("/api/cymbal/owner/posts/aaaaaaaaaaaaaaa/stickers", { kind: "heart", x: 0, y: 0 })).status, 404);
+  assert.equal((await as("owner").post("/api/cymbal/posts/aaaaaaaaaaaaaaa/stickers", { kind: "heart", x: 0, y: 0 })).status, 404);
 
   // One each per post: a second one takes the first one's place.
   const star = await as("owner").post(path, { kind: "star", x: 7, y: -3, rot: 99 });
@@ -404,7 +439,7 @@ test("stickers: everyone sees them; only the owner places, moves and removes the
   assert.equal(star.json.sticker.id, heart.json.sticker.id, "the same sticker, swapped");
   assert.deepEqual([star.json.sticker.x, star.json.sticker.y, star.json.sticker.rot], [1, 0, 30], "clamped onto the card");
   const other = await share("ann", "https://open.spotify.com/track/" + randomSpotifyId(), "and on this");
-  const second = await as("owner").post("/api/cymbal/owner/posts/" + other.id + "/stickers", { kind: "heart", x: 0.5, y: 20 });
+  const second = await as("owner").post("/api/cymbal/posts/" + other.id + "/stickers", { kind: "heart", x: 0.5, y: 20 });
   assert.equal(second.status, 200, second.text);
   assert.notEqual(second.json.sticker.id, star.json.sticker.id, "another post has its own");
 
@@ -417,14 +452,27 @@ test("stickers: everyone sees them; only the owner places, moves and removes the
     assert.ok(!r.text.includes("author_key"));
   }
 
-  const moveTo = "/api/cymbal/owner/stickers/" + star.json.sticker.id + "/move";
+  // A member gets their own one, alongside the owner's, and it's theirs to move.
+  const theirs = await call("POST", path, { token: U.member.token, body: { kind: "heart", x: 0.5, y: 10 } });
+  assert.equal(theirs.status, 200, theirs.text);
+  assert.notEqual(theirs.json.sticker.id, star.json.sticker.id);
+  const swap = await call("POST", path, { token: U.member.token, body: { kind: "star", x: 0.6, y: 12 } });
+  assert.equal(swap.json.sticker.id, theirs.json.sticker.id, "one each for members too");
+  const memberSees = (await call("GET", "/api/cymbal/feed", { token: U.member.token })).json.posts.find((p) => p.id === post.id);
+  assert.deepEqual(memberSees.stickers.map((s) => s.mine), [false, true]);
+  const theirMove = "/api/cymbal/stickers/" + theirs.json.sticker.id + "/move";
+  assert.equal((await call("POST", theirMove, { token: U.member.token, body: { x: 0.1, y: 5 } })).status, 200);
+  assert.equal((await as("owner").post(theirMove, { x: 0.1, y: 5 })).status, 403, "not even the owner moves someone else's");
+  assert.equal((await call("DELETE", "/api/cymbal/stickers/" + theirs.json.sticker.id, { token: U.member.token })).status, 200, "and they can take it back");
+
+  const moveTo = "/api/cymbal/stickers/" + star.json.sticker.id + "/move";
   assert.equal((await call("POST", moveTo, { token: U.member.token, body: { x: 0.9, y: 5 } })).status, 403);
   assert.equal((await call("POST", moveTo, { key: U.ann.key, body: { x: 0.9, y: 5 } })).status, 401);
   const moved = await as("owner").post(moveTo, { x: 0.9, y: 120, rot: 4 });
   assert.equal(moved.status, 200, moved.text);
   assert.deepEqual([moved.json.sticker.x, moved.json.sticker.y, moved.json.sticker.rot], [0.9, 120, 4]);
 
-  const gone = "/api/cymbal/owner/stickers/" + second.json.sticker.id;
+  const gone = "/api/cymbal/stickers/" + second.json.sticker.id;
   assert.equal((await call("DELETE", gone, { token: U.member.token })).status, 403);
   assert.equal((await as("owner").del(gone)).status, 200);
   assert.equal((await as("owner").del(gone)).status, 404);
@@ -491,22 +539,55 @@ test("sticker uploads: the owner adds PNGs, everyone sees them, removing one tak
   assert.equal(img.status, 200, "anyone can load the image");
 
   const post = await share("fay", "https://open.spotify.com/track/" + randomSpotifyId(), "moonlight");
-  const stuck = await as("owner").post("/api/cymbal/owner/posts/" + post.id + "/stickers", { kind: kind.id, x: 0.5, y: 30 });
+  const stuck = await as("owner").post("/api/cymbal/posts/" + post.id + "/stickers", { kind: kind.id, x: 0.5, y: 30 });
   assert.equal(stuck.status, 200, stuck.text);
   assert.equal(stuck.json.sticker.kind, kind.id);
-  assert.equal((await as("owner").post("/api/cymbal/owner/posts/" + post.id + "/stickers", { kind: "u_aaaaaaaaaaaaaaa", x: 0.5, y: 30 })).status, 400);
+  assert.equal((await as("owner").post("/api/cymbal/posts/" + post.id + "/stickers", { kind: "u_aaaaaaaaaaaaaaa", x: 0.5, y: 30 })).status, 400);
 
-  const board = await as("owner").get("/api/cymbal/owner/leaderboard");
+  const board = await call("GET", "/api/cymbal/leaderboard");
   assert.equal(board.status, 200, board.text);
   const row = board.json.posts.find((p) => p.id === post.id);
   assert.deepEqual([row.reacts, row.kinds[kind.id]], [1, 1]);
-  assert.equal((await call("GET", "/api/cymbal/owner/leaderboard", { token: U.member.token })).status, 403);
+  assert.ok(!board.text.includes("author_key") && !board.text.includes("ip_hash"));
 
   assert.equal((await call("DELETE", "/api/cymbal/owner/sticker-kinds/" + kind.id, { token: U.member.token })).status, 403);
   assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + kind.id)).status, 200);
   assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + kind.id)).status, 404);
   const after = (await call("GET", "/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
   assert.deepEqual(after.stickers, []);
+});
+
+test("profile pictures: any browser sets its own, and its posts show it", async () => {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const upload = async (who, bytes, type) => {
+    const fd = new FormData();
+    fd.append("image", new Blob([bytes], { type }), "me.png");
+    const headers = { "CF-Connecting-IP": U[who].ip };
+    if (U[who].key) headers["X-Cymbal-Key"] = U[who].key;
+    const res = await fetch(BASE + "/api/cymbal/me/profile", { method: "POST", headers, body: fd });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  assert.equal((await upload("nokey", png, "image/png")).status, 400, "a browser key is needed");
+  assert.equal((await upload("ann", Buffer.from("nope"), "text/plain")).status, 400);
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, "");
+  const set = await upload("ann", png, "image/png");
+  assert.equal(set.status, 200, JSON.stringify(set.json));
+  assert.match(set.json.pic, /^\/api\/files\/profiles\/[a-z0-9]{15}\//);
+  assert.equal((await fetch(BASE + set.json.pic)).status, 200);
+  assert.equal((await upload("ann", png, "image/png")).status, 429, "not again straight away");
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, set.json.pic);
+  assert.equal((await as("ben").get("/api/cymbal/me/profile")).json.pic, "", "another browser has its own");
+
+  const feed = (await call("GET", "/api/cymbal/feed")).json.posts;
+  const anns = feed.filter((p) => p.poster === "Ann");
+  assert.ok(anns.length && anns.every((p) => p.pic === set.json.pic), "Ann's posts show her picture");
+  assert.ok(feed.filter((p) => p.poster === "Ben").every((p) => p.pic === ""));
+
+  assert.equal((await as("ann").del("/api/cymbal/me/profile")).status, 200);
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, "");
+  for (const token of [U.member.token, U.owner.token, ""]) {
+    assert.equal((await call("GET", "/api/collections/profiles/records", { token })).status, 403);
+  }
 });
 
 test("clear the stage before providers connect", async () => {
@@ -853,13 +934,13 @@ test("deleting a post mid-flight: cancelled if not added, synced if it really wa
   const claim = await as("owner").post("/api/cymbal/owner/apple/claim", { max: 25 });
   const item = claim.json.items.find((i) => i.catalog_id === "1000000001");
   assert.ok(item);
-  assert.equal((await as("eve").del("/api/cymbal/posts/" + a.id)).status, 200);
+  assert.equal((await as("owner").del("/api/cymbal/posts/" + a.id)).status, 200);
   assert.equal((await rows(a.id)).apple_music.status, "cancelled");
   await as("owner").post("/api/cymbal/owner/apple/complete", { results: [{ sync_id: item.sync_id, lease: item.lease, outcome: "added" }] });
   assert.equal((await rows(a.id)).apple_music.status, "synced", "it is on the playlist, so the record says so");
 
   const b = await share("eve", "https://music.apple.com/gb/song/song-c/1000000003");
-  assert.equal((await as("eve").del("/api/cymbal/posts/" + b.id)).status, 200);
+  assert.equal((await as("owner").del("/api/cymbal/posts/" + b.id)).status, 200);
   const later = await as("owner").post("/api/cymbal/owner/apple/claim", { max: 25 });
   assert.ok(!later.json.items.some((i) => i.catalog_id === "1000000003"));
   assert.equal((await rows(b.id)).apple_music.status, "cancelled");

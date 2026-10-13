@@ -1,23 +1,26 @@
 /* pb-auth.js — the single seam between this app and PocketBase auth.
  *
- * Only the owner ever signs in, and only for the owner panel. The account lives in
- * this app's own `users` collection (email + password); there is no single sign-on
- * and no self-service sign-up — the owner's record is created in the PocketBase
- * dashboard, with role = admin set there by a superuser.
+ * Anyone can make an account and sign in; signed-in people get the new features and
+ * can place stickers. Accounts live in this app's own `users` collection (email +
+ * password), with no single sign-on. Sign-up goes through POST /api/cymbal/signup,
+ * which always makes role "user"; the owner is the one account a superuser gave
+ * role = admin in the PocketBase dashboard.
  *
  * Do not reimplement any of this in app code, and do not read `role` from anywhere
  * but the record: the users collection refuses any request that tries to set it
- * (pb_migrations/1756540000_identity.js, 1790467200_owner_password_auth.js).
+ * (pb_migrations/1756540000_identity.js, 1790467200_owner_password_auth.js,
+ * 1791700000_member_accounts.js).
  *
  *   PBAuth.getClient()              PocketBase client, authenticated if signed in
  *   PBAuth.signIn(email, password)  password sign-in (returns a promise)
+ *   PBAuth.signUp(email, password, name)  make an account and sign in to it
  *   PBAuth.signOut()                clear the local session
  *   PBAuth.user()                   the signed-in record, or null
  *   PBAuth.isSignedIn()
  *   PBAuth.isAdmin()                true when this person is an admin OF THIS APP
  *   PBAuth.onChange(fn)             called whenever sign-in state changes
  *
- * Sessions are short (thirty minutes) and are not renewed silently. onChange fires
+ * Sessions last seven days and are not renewed silently. onChange fires
  * with null the moment the session lapses; show the sign-in control at that point.
  *
  * Collection rules key on `@request.auth.id`. An app whose rules key on anything the
@@ -94,6 +97,16 @@ const PBAuth = (() => {
     return user();
   }
 
+  // The new account comes back signed in, the same shape authWithPassword returns.
+  async function signUp(email, password, name) {
+    const res = await client.send('/api/cymbal/signup', {
+      method: 'POST',
+      body: { email: String(email || ''), password: String(password || ''), name: String(name || '') },
+    });
+    client.authStore.save(res.token, res.record);
+    return user();
+  }
+
   function signOut() {
     client.authStore.clear();
   }
@@ -111,5 +124,5 @@ const PBAuth = (() => {
     return client;
   }
 
-  return { getClient, signIn, signOut, user, isSignedIn, isAdmin, onChange };
+  return { getClient, signIn, signUp, signOut, user, isSignedIn, isAdmin, onChange };
 })();

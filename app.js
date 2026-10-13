@@ -11,8 +11,9 @@
  * The owner signs in from the top bar, with an email and password, for the owner
  * panel; that session is thirty minutes and never renewed silently (pb-auth.js).
  *
- * The same file runs settings.html, the owner's second page (body data-page=
- * "settings"), which has no composer or feed. New features are switched on per
+ * The same file runs misc.html, the second page (body data-page="misc"): your
+ * picture, playlists, theme, most reacts, and for the owner the owner panel. It has
+ * no composer or feed. New features are switched on per
  * audience in features.js; on() below is the only thing that reads it.
  */
 (() => {
@@ -30,14 +31,16 @@
   const onFeed = PAGE === "feed";
 
   // ── features (features.js) ────────────────────────────────────────────────
-  // "owner" features are drawn only while the owner is signed in. Each one also puts
-  // an ff-<name> class on <html> so the stylesheet can follow the same switch.
+  // "members" features are drawn for anyone signed in, "owner" ones only for the
+  // owner. Each one also puts an ff-<name> class on <html> so the stylesheet can
+  // follow the same switch.
 
   let ownerNow = PBAuth.isAdmin();
+  let memberNow = PBAuth.isSignedIn();
 
   function on(name) {
     const v = (typeof FEATURES === "object" && FEATURES) ? FEATURES[name] : "off";
-    return v === "all" || (v === "owner" && ownerNow);
+    return v === "all" || (v === "members" && memberNow) || (v === "owner" && ownerNow);
   }
 
   function applyFeatures() {
@@ -317,10 +320,21 @@
     return h("span", { class: "avatar av-" + (n % 6), "aria-hidden": "true" }, first.toUpperCase());
   }
 
-  // Someone who posted without an account: the same plain outline as the signed-out
-  // top bar, rather than a letter that suggests a profile.
-  function anonAvatar() {
-    return h("span", { class: "avatar avatar-out avatar-anon", "aria-hidden": "true" });
+  // Same-origin profile pictures only: PocketBase's /api/files/profiles/.
+  function safePic(src) {
+    return typeof src === "string" && /^\/api\/files\/profiles\/[a-z0-9]{15}\/[A-Za-z0-9_.%-]+$/.test(src);
+  }
+
+  function picAvatar(src) {
+    return h("img", { class: "avatar avatar-pic", src: src, alt: "", loading: "lazy" });
+  }
+
+  // The poster's picture if their browser set one; otherwise a letter, but (with
+  // accountAvatars) only for a post made from an account, and nothing at all for the rest.
+  function posterAvatar(p) {
+    if (on("profilePics") && safePic(p.pic)) return picAvatar(p.pic);
+    if (on("accountAvatars") && !p.account) return null;
+    return avatar(p.poster);
   }
 
   // The embed for a post's own link, built only from the id in a canonical URL the
@@ -363,32 +377,38 @@
     const fallback = (p.source_label || "Unknown") + " track";
     const title = p.title || (p.unavailable ? "Couldn't look this one up" : (p.resolving && !stale ? "Finding the track details…" : fallback));
     const count = p.comment_count || 0;
+    const compact = on("compactCards");
+    const remove = p.can_delete ? (compact
+      ? h("button", { class: "btn-x", type: "button", title: "Remove this post", "aria-label": "Remove this post", onclick: () => removePost(p.id) }, "✕")
+      : h("button", { class: "btn-remove", type: "button", onclick: () => removePost(p.id) },
+        h("span", { "aria-hidden": "true" }, "✕"), "Remove")) : null;
     const card = h("li", { class: "card panel", "data-id": p.id, "data-count": count },
       h("div", { class: "card-head" },
-        on("accountAvatars") && !p.account ? anonAvatar() : avatar(p.poster),
+        posterAvatar(p),
         h("span", { class: "who" }, h("strong", null, p.poster), h("span", { class: "when" }, when(p.created),
           on("listenCount") ? h("span", { class: "listens", title: "Browsers that played this" },
             " · ", h("span", { "aria-hidden": "true" }, "♪ "), h("span", { class: "js-listens" }, String(p.listen_count || 0)),
             h("span", null, p.listen_count === 1 ? " listen" : " listens")) : null)),
-        h("span", { class: "src src-" + (p.source || "x") }, (p.source_label || "").toUpperCase())),
+        compact ? remove : h("span", { class: "src src-" + (p.source || "x") }, (p.source_label || "").toUpperCase())),
       p.caption ? h("p", { class: "caption" }, p.caption) : null,
-      h("div", { class: "song" },
-        h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title)),
-        p.artist ? h("p", { class: "artist" }, p.artist) : null),
+      compact
+        // One line: "Title - Artist", the artist quieter.
+        ? h("div", { class: "song" },
+          h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title),
+            p.artist ? h("span", { class: "artist-inline" }, " - " + p.artist) : null))
+        : h("div", { class: "song" },
+          h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title)),
+          p.artist ? h("p", { class: "artist" }, p.artist) : null),
       player(p),
-      syncChips(p),
+      compact ? null : syncChips(p),
       h("div", { class: "card-actions" },
         h("button", {
           class: "btn btn-small js-toggle" + (on("plusComment") ? " btn-tiny" : ""), type: "button",
           "aria-expanded": "false", "aria-controls": "c-" + p.id,
           onclick: (ev) => (on("openComments") ? toggleCommentForm : toggleComments)(ev.currentTarget.closest(".card"), p.id),
         }, commentLabel(count)),
-        on("stickerButton") && ownerNow ? h("button", {
-          class: "btn btn-small btn-tiny js-stick", type: "button", "aria-expanded": "false",
-          onclick: (ev) => toggleTray(ev.currentTarget.closest(".card"), ev.currentTarget),
-        }, h("img", { class: "stick-icon", src: stickerSrc("heart"), alt: "" }), "STICKER") : null,
-        p.can_delete ? h("button", { class: "btn-remove", type: "button", onclick: () => removePost(p.id) },
-          h("span", { "aria-hidden": "true" }, "✕"), "Remove") : null),
+        on("stickerButton") && memberNow ? stickButton() : null,
+        compact ? null : remove),
       h("div", { class: "comments", id: "c-" + p.id, hidden: true }),
       p.stickers && p.stickers.length ? stickerLayer(p) : null);
     if (on("openComments")) fillThread(card, p);
@@ -712,6 +732,18 @@
     btn.setAttribute("aria-expanded", "true");
   }
 
+  // The button shows the newest stickers (uploads come last in KINDS), so a new one
+  // is visible on every post as soon as it's uploaded.
+  function stickButton() {
+    const newest = KINDS.slice().reverse().slice(0, 3);
+    return h("button", {
+      class: "btn btn-small btn-tiny js-stick stick-btn", type: "button", "aria-expanded": "false",
+      "aria-label": "Stick a sticker on this post", title: "Stickers",
+      onclick: (ev) => toggleTray(ev.currentTarget.closest(".card"), ev.currentTarget),
+    }, h("span", { class: "stick-stack", "aria-hidden": "true" }, newest.map((k) => h("img", { src: stickerSrc(k.id), alt: "" }))),
+    h("span", { "aria-hidden": "true" }, "+"));
+  }
+
   function closeTray(card) {
     const tray = card && card.querySelector(".sticker-tray");
     if (tray) tray.remove();
@@ -847,7 +879,7 @@
       if (!card) {
         if (!from) return;
         from.el.remove();
-        await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
+        await api("/api/cymbal/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
         return;
       }
       const r = card.getBoundingClientRect();
@@ -861,7 +893,7 @@
       if (from && from.postId === postId) {
         pinSticker(from.el, spot);
         from.el.hidden = false;
-        await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id) + "/move", { method: "POST", body: spot });
+        await api("/api/cymbal/stickers/" + encodeURIComponent(from.id) + "/move", { method: "POST", body: spot });
         return;
       }
       const layer = layerOf(card);
@@ -873,10 +905,10 @@
       layer.append(el);
       if (from) {
         from.el.remove();
-        await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
+        await api("/api/cymbal/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
       }
       try {
-        const res = await api("/api/cymbal/owner/posts/" + encodeURIComponent(postId) + "/stickers", { method: "POST", body: spot });
+        const res = await api("/api/cymbal/posts/" + encodeURIComponent(postId) + "/stickers", { method: "POST", body: spot });
         el.dataset.id = res.sticker.id;
         replaced.forEach((old) => old.remove());
       } catch (err) {
@@ -918,13 +950,32 @@
     }
   }
 
-  // ── the owner ─────────────────────────────────────────────────────────────
+  // ── signing in ────────────────────────────────────────────────────────────
+  // One form for both: signing in to an account, or making one (with a name).
+
+  let signingUp = false;
+
+  function loginMode(up) {
+    signingUp = up;
+    $("owner-login-title").textContent = up ? "MAKE AN ACCOUNT" : "SIGN IN";
+    $("owner-name").hidden = !up;
+    document.querySelector('label[for="owner-name"]').hidden = !up;
+    $("owner-password").autocomplete = up ? "new-password" : "current-password";
+    $("owner-login-go").textContent = up ? "MAKE ACCOUNT" : "SIGN IN";
+    $("owner-login-mode").textContent = up ? "Have an account? Sign in" : "New here? Make an account";
+    say("owner-login-status", "");
+  }
 
   function closeLogin() {
     $("owner-login").hidden = true;
     $("owner-password").value = "";
-    say("owner-login-status", "");
+    loginMode(false);
   }
+
+  $("owner-login-mode").addEventListener("click", () => {
+    loginMode(!signingUp);
+    (signingUp ? $("owner-name") : $("owner-email")).focus();
+  });
 
   // The top bar's account button: signed out it opens the sign-in form, signed in it
   // opens a small menu with SIGN OUT. On phones it's just the circle; wider screens
@@ -935,7 +986,7 @@
   }
 
   function showAccount(user) {
-    const name = user ? (user.name || String(user.email || "").split("@")[0] || "Owner") : "";
+    const name = user ? (user.name || String(user.email || "").split("@")[0] || "You") : "";
     const old = $("account-avatar");
     const circle = user ? avatar(name) : h("span", {}, "");
     circle.id = "account-avatar";
@@ -943,8 +994,8 @@
     if (!user) circle.classList.add("avatar", "avatar-out");
     old.replaceWith(circle);
     $("account-label").textContent = user ? name : "SIGN IN";
-    const settings = $("settings-link");
-    if (settings) settings.hidden = !(user && user.role === "admin" && on("settingsPage"));
+    const misc = $("misc-link");
+    if (misc) misc.hidden = !on("miscPage");
     $("account").setAttribute("aria-label", user ? "Signed in as " + name : "Sign in");
     closeMenu();
   }
@@ -976,17 +1027,23 @@
     ev.preventDefault();
     const email = $("owner-email").value.trim();
     const password = $("owner-password").value;
-    if (!email || !password) return say("owner-login-status", "Enter the owner email and password.", "error");
+    const name = $("owner-name").value.trim();
+    if (signingUp && name.length < 2) return say("owner-login-status", "Pick a name of at least 2 characters.", "error");
+    if (!email || !password) return say("owner-login-status", "Enter your email and password.", "error");
+    if (signingUp && password.length < 8) return say("owner-login-status", "Use a password of at least 8 characters.", "error");
     const btn = $("owner-login-go");
     btn.disabled = true;
-    say("owner-login-status", "Signing in…");
+    say("owner-login-status", signingUp ? "Making your account…" : "Signing in…");
     try {
-      await PBAuth.signIn(email, password);
+      if (signingUp) await PBAuth.signUp(email, password, name);
+      else await PBAuth.signIn(email, password);
       closeLogin();
     } catch (err) {
       const status = err && err.status;
+      const msg = err && err.response && err.response.message;
       say("owner-login-status", status === 0 ? "Couldn't reach Cymbal. Check your connection."
-        : status === 429 ? "Too many attempts. Wait a minute and try again."
+        : status === 429 ? (signingUp && msg ? msg : "Too many attempts. Wait a minute and try again.")
+        : signingUp ? (msg || "That account couldn't be made.")
         : "That email and password didn't match.", "error");
     } finally {
       btn.disabled = false;
@@ -1022,11 +1079,11 @@
     const attention = h("div", { id: "owner-attention" });
     const dismissed = h("div", { id: "owner-dismissed" });
     let open = false;
-    // Folded away on the feed until opened; on the settings page it's the point, so open.
+    // Folded away on the feed until opened; on the misc page it's the point, so open.
     try {
       const saved = sessionStorage.getItem("cymbal_owner_open");
-      open = PAGE === "settings" ? saved !== "0" : saved === "1";
-    } catch (_) { open = PAGE === "settings"; }
+      open = PAGE === "misc" ? saved !== "0" : saved === "1";
+    } catch (_) { open = PAGE === "misc"; }
     const details = h("details", { open: open ? true : null },
       h("summary", { id: "owner-title" }, "OWNER PANEL"),
       h("div", { class: "owner-grid" },
@@ -1534,14 +1591,83 @@
     });
   }
 
-  // ── settings page: reacts leaderboard and sticker uploads ─────────────────
+  // ── misc page: your picture, most reacts, and (owner) sticker uploads ─────
+
+  // A picture straight from a phone is often several megabytes, so it's cropped to a
+  // centred square and shrunk to 256px here before it's sent. Read as a data: URL,
+  // which the page's CSP allows for images where blob: is not.
+  function squarePicture(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Couldn't read that picture."));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("That doesn't look like a picture."));
+        img.onload = () => {
+          const side = Math.min(img.naturalWidth, img.naturalHeight);
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 256;
+          canvas.getContext("2d").drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
+          canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't shrink that picture."))), "image/jpeg", 0.88);
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function loadProfile() {
+    const box = $("profile");
+    if (!box) return;
+    let pic = "";
+    try { pic = (await api("/api/cymbal/me/profile")).pic; } catch (_) { /* shown as none */ }
+    const status = h("p", { id: "profile-status", class: "status", role: "status", "aria-live": "polite" });
+    const face = safePic(pic) ? picAvatar(pic) : h("span", { class: "avatar avatar-none", "aria-hidden": "true" });
+    face.classList.add("profile-face");
+    const file = h("input", { id: "profile-file", class: "visually-hidden", type: "file", accept: "image/*" });
+    file.addEventListener("change", async () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      say("profile-status", "Uploading…");
+      try {
+        const body = new FormData();
+        body.append("image", await squarePicture(f), "me.jpg");
+        await api("/api/cymbal/me/profile", { method: "POST", body: body });
+        await loadProfile();
+        say("profile-status", "Saved. Your posts show it now.", "ok");
+      } catch (err) {
+        say("profile-status", err.message, "error");
+      }
+    });
+    const name = h("input", { id: "profile-name", type: "text", maxlength: "32", autocomplete: "nickname", placeholder: "Your name" });
+    name.value = savedName();
+    name.addEventListener("change", () => {
+      const v = name.value.trim();
+      if (v.length >= 2) { rememberName(v); say("profile-status", "Name saved for your next post.", "ok"); }
+    });
+    box.replaceChildren(h("h2", { id: "profile-title", class: "label" }, "YOU"),
+      h("div", { class: "profile-row" }, face,
+        h("div", { class: "profile-fields" },
+          h("label", { class: "visually-hidden", for: "profile-name" }, "Your name"), name,
+          h("div", { class: "row" },
+            h("label", { class: "btn btn-small", for: "profile-file" }, safePic(pic) ? "CHANGE PICTURE" : "ADD A PICTURE"), file,
+            safePic(pic) ? h("button", { class: "link-btn", type: "button", onclick: async () => {
+              try {
+                await api("/api/cymbal/me/profile", { method: "DELETE" });
+                await loadProfile();
+                say("profile-status", "Picture removed.", "ok");
+              } catch (err) { say("profile-status", err.message, "error"); }
+            } }, "remove") : null))),
+      h("p", { class: "small" }, "This picture belongs to this browser: it shows on posts you make from here."),
+      status);
+  }
 
   async function loadLeaderboard() {
     const box = $("leaderboard");
     if (!box) return;
     box.hidden = false;
     let data;
-    try { data = await api("/api/cymbal/owner/leaderboard"); } catch (err) {
+    try { data = await api("/api/cymbal/leaderboard"); } catch (err) {
       box.replaceChildren(h("h2", { class: "label" }, "MOST REACTS"), h("p", { class: "status is-error" }, err.message));
       return;
     }
@@ -1611,6 +1737,11 @@
 
   applyFeatures();
   const kindsReady = loadKinds();
+  if (PAGE === "misc") {
+    loadProfile();
+    loadPlaylists();
+    kindsReady.then(loadLeaderboard);
+  }
   if (onFeed) {
     setupComposer();
     $("more").addEventListener("click", () => loadFeed(false));
@@ -1628,32 +1759,36 @@
   if (done || failed) history.replaceState(null, "", location.pathname);
 
   // onChange calls back immediately with the current session, then on every change.
-  // Only the owner ever signs in; anyone else's session is simply ignored.
-  let ownerState = null;
+  // Anyone can sign in: that turns on the "members" features and stickers. The owner
+  // panel and sticker uploads are the owner's alone.
+  let whoState = null;
   PBAuth.onChange((user) => {
     const owner = !!user && user.role === "admin";
     ownerNow = owner;
+    memberNow = !!user;
     applyFeatures();
     showAccount(user);
     if (user) closeLogin();
-    showStickerDock(onFeed && owner && !on("stickerButton"));
-    const settingsHere = PAGE === "settings";
-    if ($("settings-locked")) $("settings-locked").hidden = owner;
+    // A new account's name becomes the name it posts under, unless one is remembered.
+    if (user && onFeed && !savedName() && user.name) { rememberName(user.name); $("name").value = user.name; showName(false); }
+    showStickerDock(onFeed && !!user && !on("stickerButton"));
+    const miscHere = PAGE === "misc";
     if (owner) {
-      // With the settings page on, the owner panel lives there; Apple Music still
+      // With the misc page on, the owner panel lives there; Apple Music still
       // drains from the feed page in an authorised browser.
-      if (settingsHere || !on("settingsPage")) loadOwner();
+      if (miscHere || !on("miscPage")) loadOwner();
       else appleAutoStart();
-      if (settingsHere) { loadLeaderboard(); loadStickerAdmin(); }
+      if (miscHere) loadStickerAdmin();
     } else {
       $("owner").hidden = true;
       $("owner").replaceChildren();
-      ["leaderboard", "sticker-admin"].forEach((id) => { if ($(id)) { $(id).hidden = true; $(id).replaceChildren(); } });
+      if ($("sticker-admin")) { $("sticker-admin").hidden = true; $("sticker-admin").replaceChildren(); }
       stopApple();
-      if (user) say(settingsHere ? "owner-login-status" : "composer-status", "That account isn't Cymbal's owner.", "error");
     }
-    // Remove buttons and owner features depend on who is looking, so redraw when that changes.
-    if (onFeed && ownerState !== null && ownerState !== owner) loadFeed(true);
-    ownerState = owner;
+    // Remove buttons, stickers and features depend on who is looking, so redraw when
+    // that changes.
+    const who = owner ? "owner" : user ? "user:" + user.id : "";
+    if (onFeed && whoState !== null && whoState !== who) loadFeed(true);
+    whoState = who;
   });
 })();

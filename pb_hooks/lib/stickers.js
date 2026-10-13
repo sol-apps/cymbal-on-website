@@ -1,8 +1,9 @@
 /// <reference path="../../pb_data/types.d.ts" />
 /*
  * lib/stickers.js — hearts, stars and the owner's uploaded PNGs stuck on posts.
- * Everyone sees them. Each person gets one per post; for now only the owner can place,
- * move or remove one, and theirs are filed under OWNER whichever browser they used.
+ * Everyone sees them. Anyone signed in can place one per post, and move or take back
+ * only their own. They are filed by account, not browser: the owner's under OWNER
+ * (as they always were), everyone else's under "user:" + their account id.
  *
  * A sticker's kind is "heart" or "star" for the built-in two, or "u_<record id>" for
  * an upload in sticker_kinds.
@@ -26,20 +27,27 @@ function kindOf(rec) {
   return custom ? "u_" + custom : rec.getString("kind");
 }
 
+// Whose stickers a request places and picks up: "" when nobody is signed in.
+function keyOf(e) {
+  if (!e.auth || e.auth.collection().name !== "users") return "";
+  return util().isOwner(e) ? OWNER : "user:" + e.auth.id;
+}
+
 // `mine` is what lets the browser pick it back up.
-function view(rec, owner) {
+function view(rec, viewer) {
   return {
     id: rec.id,
     kind: kindOf(rec),
     x: rec.getFloat("x"),
     y: rec.getFloat("y"),
     rot: rec.getFloat("rot"),
-    mine: !!owner && rec.getString("author_key") === OWNER,
+    mine: !!viewer && rec.getString("author_key") === viewer,
   };
 }
 
 // { postId: [sticker, ...] } for the given posts, oldest first so later ones sit on top.
-function byPost(app, postIds, owner) {
+function byPost(app, postIds, e) {
+  const viewer = keyOf(e);
   const out = {};
   if (!postIds.length) return out;
   app.findAllRecords("stickers", $dbx.in("post", ...postIds)).forEach((r) => {
@@ -50,7 +58,7 @@ function byPost(app, postIds, owner) {
   Object.keys(out).forEach((p) => {
     out[p] = out[p]
       .sort((a, b) => (a.getString("created") < b.getString("created") ? -1 : a.getString("created") > b.getString("created") ? 1 : 0))
-      .map((r) => view(r, owner));
+      .map((r) => view(r, viewer));
   });
   return out;
 }
@@ -74,10 +82,18 @@ function liveSticker(app, id) {
   return rec;
 }
 
-// POST /api/cymbal/owner/posts/{id}/stickers  { kind, x, y, rot }
+function ownSticker(app, e, id) {
+  const rec = liveSticker(app, id);
+  if (rec.getString("author_key") !== keyOf(e)) throw new ForbiddenError("You can only move your own stickers.");
+  return rec;
+}
+
+// POST /api/cymbal/posts/{id}/stickers  { kind, x, y, rot }
 // One each per post: a second one replaces the first rather than joining it.
-function add(app, postId, body) {
+function add(app, e, postId, body) {
   const u = util();
+  const who = keyOf(e);
+  if (!who) throw new UnauthorizedError("Sign in to place stickers.");
   if (!/^[a-z0-9]{15}$/.test(String(postId || ""))) throw new NotFoundError("No such post.");
   if (!u.findOne(app, "posts", "id = {:id} && deleted = false", { id: postId })) throw new NotFoundError("No such post.");
   const kind = String(body.kind || "");
@@ -88,33 +104,33 @@ function add(app, postId, body) {
   } else if (KINDS.indexOf(kind) === -1) {
     throw new BadRequestError("Unknown sticker.");
   }
-  let rec = u.findOne(app, "stickers", "post = {:p} && author_key = {:k}", { p: postId, k: OWNER });
+  let rec = u.findOne(app, "stickers", "post = {:p} && author_key = {:k}", { p: postId, k: who });
   if (!rec) {
     if (app.countRecords("stickers", $dbx.hashExp({ post: postId })) >= PER_POST) {
       throw new BadRequestError("That post has " + PER_POST + " stickers already.");
     }
     rec = new Record(app.findCollectionByNameOrId("stickers"));
     rec.set("post", postId);
-    rec.set("author_key", OWNER);
+    rec.set("author_key", who);
   }
   rec.set("kind", custom ? "" : kind);
   rec.set("custom", custom);
   place(rec, body);
   app.save(rec);
-  return { sticker: view(rec, true) };
+  return { sticker: view(rec, who) };
 }
 
-// POST /api/cymbal/owner/stickers/{id}/move  { x, y, rot }
-function move(app, id, body) {
-  const rec = liveSticker(app, id);
+// POST /api/cymbal/stickers/{id}/move  { x, y, rot }
+function move(app, e, id, body) {
+  const rec = ownSticker(app, e, id);
   place(rec, body);
   app.save(rec);
-  return { sticker: view(rec, true) };
+  return { sticker: view(rec, keyOf(e)) };
 }
 
-// DELETE /api/cymbal/owner/stickers/{id}
-function remove(app, id) {
-  app.delete(liveSticker(app, id));
+// DELETE /api/cymbal/stickers/{id} — taking your own sticker back off.
+function remove(app, e, id) {
+  app.delete(ownSticker(app, e, id));
   return { ok: true };
 }
 
@@ -166,7 +182,7 @@ function removeKind(app, id) {
   return { ok: true };
 }
 
-// GET /api/cymbal/owner/leaderboard — posts by how many reacts (stickers) they have,
+// GET /api/cymbal/leaderboard — posts by how many reacts (stickers) they have,
 // with listens and comments alongside to break ties.
 function leaderboard(app) {
   const rows = arrayOf(new DynamicModel({ post: "", kind: "", custom: "", n: 0 }));
