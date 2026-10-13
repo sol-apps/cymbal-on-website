@@ -804,7 +804,7 @@
     if (ev.target.releasePointerCapture && ev.target.hasPointerCapture && ev.target.hasPointerCapture(ev.pointerId)) {
       ev.target.releasePointerCapture(ev.pointerId);
     }
-    carry = { kind: kind, el: el, from: from, rot: rot, x0: ev.clientX, y0: ev.clientY, moved: false, sticky: false, target: null };
+    carry = { kind: kind, el: el, from: from, rot: rot, x0: ev.clientX, y0: ev.clientY, moved: false, sticky: false, target: null, tilt: 0 };
     document.body.classList.add("is-sticking");
     follow(ev.clientX, ev.clientY);
     window.addEventListener("pointermove", onCarryMove, true);
@@ -814,9 +814,23 @@
     window.addEventListener("keydown", onCarryKey, true);
   }
 
+  // The sticker in hand moves on the compositor (translate, not left/top), and leans a
+  // little into the direction it's being moved, settling upright when it stops.
   function follow(x, y) {
-    carry.el.style.left = x + "px";
-    carry.el.style.top = y + "px";
+    const el = carry.el;
+    el.style.translate = "calc(" + x + "px - 50%) calc(" + y + "px - 50%)";
+    if (carry.lastX !== undefined) {
+      const lean = Math.max(-9, Math.min(9, (x - carry.lastX) * 0.7));
+      carry.tilt = carry.tilt * 0.6 + lean * 0.4;
+      el.style.setProperty("--tilt", carry.tilt.toFixed(2) + "deg");
+      clearTimeout(carry.calm);
+      carry.calm = setTimeout(() => {
+        if (!carry || carry.el !== el) return;
+        carry.tilt = 0;
+        el.style.setProperty("--tilt", "0deg");
+      }, 70);
+    }
+    carry.lastX = x;
     const card = cardAt(x, y);
     if (card !== carry.target) {
       if (carry.target) carry.target.classList.remove("sticker-target");
@@ -874,6 +888,7 @@
   function endCarry() {
     const c = carry;
     carry = null;
+    clearTimeout(c.calm);
     window.removeEventListener("pointermove", onCarryMove, true);
     window.removeEventListener("pointerdown", onCarryDown, true);
     window.removeEventListener("pointerup", onCarryUp, true);
@@ -896,6 +911,16 @@
     if (!carry) return;
     const c = endCarry();
     if (c.from) c.from.el.hidden = false;
+  }
+
+  // Let go, a sticker settles onto the post: it starts from however it was leaning and
+  // springs flat (app.css, sticker-settle).
+  function settle(el, tilt) {
+    el.classList.remove("is-new");
+    el.style.setProperty("--tilt0", (tilt || 0).toFixed(2) + "deg");
+    void el.offsetWidth;
+    el.classList.add("is-new");
+    el.addEventListener("animationend", () => el.classList.remove("is-new"), { once: true });
   }
 
   // `onto` places a sticker on a given post without one in hand (the tray's tap).
@@ -921,6 +946,7 @@
       if (from && from.postId === postId) {
         pinSticker(from.el, spot);
         from.el.hidden = false;
+        settle(from.el, c.tilt);
         await api("/api/cymbal/stickers/" + encodeURIComponent(from.id) + "/move", { method: "POST", body: spot });
         return;
       }
@@ -928,8 +954,7 @@
       const replaced = [...layer.querySelectorAll(".sticker-placed.is-mine")];
       replaced.forEach((old) => { old.hidden = true; });
       const el = placedSticker(postId, Object.assign({ mine: true }, spot));
-      el.classList.add("is-new");
-      el.addEventListener("animationend", () => el.classList.remove("is-new"), { once: true });
+      settle(el, c.tilt);
       layer.append(el);
       if (from) {
         from.el.remove();
