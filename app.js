@@ -8,8 +8,8 @@
  * Nobody signs in to post. This browser gets a random private key the first time the
  * page loads and sends it as X-Cymbal-Key; the server stores only its hash, and it is
  * what lets this browser remove its own posts. The typed name is remembered here.
- * The owner signs in from the top bar, with an email and password, for the owner
- * panel; that session is thirty minutes and never renewed silently (pb-auth.js).
+ * Anyone can make an account and sign in from the top bar, with an email and password;
+ * a session lasts seven days and is never renewed silently (pb-auth.js).
  *
  * The same file runs misc.html, the second page (body data-page="misc"): your
  * picture, playlists, theme, most reacts, and for the owner the owner panel. It has
@@ -1721,11 +1721,24 @@
         say("profile-status", err.message, "error");
       }
     });
+    // One name for the account: posts, comments and the top bar all use it.
+    const account = PBAuth.user();
     const name = h("input", { id: "profile-name", type: "text", maxlength: "32", autocomplete: "nickname", placeholder: "Your name" });
-    name.value = savedName();
-    name.addEventListener("change", () => {
-      const v = name.value.trim();
-      if (v.length >= 2) { rememberName(v); say("profile-status", "Name saved for your next post.", "ok"); }
+    name.value = (account && account.name) || savedName();
+    name.addEventListener("change", async () => {
+      const v = name.value.trim().replace(/\s+/g, " ");
+      const u = PBAuth.user();
+      if (v.length < 2) { say("profile-status", "Pick a name of at least 2 characters.", "error"); return; }
+      rememberName(v);
+      if (!u || u.name === v) { say("profile-status", "Name saved.", "ok"); return; }
+      try {
+        // The record comes back with the new name; saving it updates the top bar.
+        const rec = await pb.collection("users").update(u.id, { name: v });
+        pb.authStore.save(pb.authStore.token, rec);
+        say("profile-status", "Name saved.", "ok");
+      } catch (err) {
+        say("profile-status", "Couldn't save your name. Try again.", "error");
+      }
     });
     box.replaceChildren(h("h2", { id: "profile-title", class: "label" }, "YOU"),
       h("div", { class: "profile-row" }, face,
@@ -1854,6 +1867,10 @@
   let whoState = null;
   PBAuth.onChange((user) => {
     const owner = !!user && user.role === "admin";
+    // Remove buttons, stickers and panels depend on who is looking, so they're redrawn
+    // when that changes, and only then: saving a new name mustn't redraw the page.
+    const who = owner ? "owner" : user ? "user:" + user.id : "";
+    const changed = whoState !== who;
     ownerNow = owner;
     memberNow = !!user;
     applyFeatures();
@@ -1866,14 +1883,15 @@
     if (owner) {
       // With the misc page on, the owner panel lives there; Apple Music still
       // drains from the feed page in an authorised browser.
-      if (miscHere || !on("miscPage")) loadOwner();
+      if (!changed) { /* already drawn for the owner */ }
+      else if (miscHere || !on("miscPage")) loadOwner();
       else appleAutoStart();
     } else {
       $("owner").hidden = true;
       $("owner").replaceChildren();
       stopApple();
     }
-    if (miscHere) {
+    if (miscHere && changed) {
       loadProfile();
       loadStickerAdmin();
       // The + beside a post's stickers lands here; submitting one needs an account.
@@ -1882,10 +1900,7 @@
         say("owner-login-status", "Sign in or make an account to submit a sticker.");
       }
     }
-    // Remove buttons, stickers and features depend on who is looking, so redraw when
-    // that changes.
-    const who = owner ? "owner" : user ? "user:" + user.id : "";
-    if (onFeed && whoState !== null && whoState !== who) loadFeed(true);
+    if (onFeed && whoState !== null && changed) loadFeed(true);
     whoState = who;
   });
 })();
