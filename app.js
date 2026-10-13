@@ -913,8 +913,8 @@
     if (c.from) c.from.el.hidden = false;
   }
 
-  // Let go, a sticker settles onto the post: it starts from however it was leaning and
-  // springs flat (app.css, sticker-settle).
+  // Let go, a sticker peels down onto the post from however it was leaning, with no
+  // rebound (app.css, sticker-peel).
   function settle(el, tilt) {
     el.classList.remove("is-new");
     el.style.setProperty("--tilt0", (tilt || 0).toFixed(2) + "deg");
