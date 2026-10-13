@@ -378,6 +378,8 @@
     const title = p.title || (p.unavailable ? "Couldn't look this one up" : (p.resolving && !stale ? "Finding the track details…" : fallback));
     const count = p.comment_count || 0;
     const compact = on("compactCards");
+    // With stickers, one button opens the comment box with the stickers inside it.
+    const merged = on("stickerButton") && on("openComments") && memberNow;
     const remove = p.can_delete ? (compact
       ? h("button", { class: "btn-x", type: "button", title: "Remove this post", "aria-label": "Remove this post", onclick: () => removePost(p.id) }, "✕")
       : h("button", { class: "btn-remove", type: "button", onclick: () => removePost(p.id) },
@@ -391,7 +393,9 @@
             h("span", null, p.listen_count === 1 ? " listen" : " listens")) : null)),
         compact ? remove : h("span", { class: "src src-" + (p.source || "x") }, (p.source_label || "").toUpperCase())),
       p.caption ? h("p", { class: "caption" }, p.caption) : null,
-      compact
+      // The player already shows the song and artist, so compact cards leave them to
+      // it; a post with no player still says what it is, on one line.
+      compact && embedFor(p) ? null : compact
         // One line: "Title - Artist", the artist quieter.
         ? h("div", { class: "song" },
           h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title),
@@ -403,11 +407,12 @@
       compact ? null : syncChips(p),
       h("div", { class: "card-actions" },
         h("button", {
-          class: "btn btn-small js-toggle" + (on("plusComment") ? " btn-tiny" : ""), type: "button",
+          class: merged ? "plus-btn js-toggle stick-btn" : "btn btn-small js-toggle" + (on("plusComment") ? " btn-tiny" : ""), type: "button",
           "aria-expanded": "false", "aria-controls": "c-" + p.id,
+          "aria-label": merged ? "Comment or stick a sticker on this post" : null,
+          title: merged ? "Comment or stick a sticker" : null,
           onclick: (ev) => (on("openComments") ? toggleCommentForm : toggleComments)(ev.currentTarget.closest(".card"), p.id),
-        }, commentLabel(count)),
-        on("stickerButton") && memberNow ? stickButton() : null,
+        }, h("span", { class: "js-count-label", "aria-hidden": merged ? "true" : null }, merged ? "+" : commentLabel(count))),
         compact ? null : remove),
       h("div", { class: "comments", id: "c-" + p.id, hidden: true }),
       p.stickers && p.stickers.length ? stickerLayer(p) : null);
@@ -516,7 +521,8 @@
   function bumpCount(card, delta) {
     const n = Math.max(0, Number(card.dataset.count || 0) + delta);
     card.dataset.count = n;
-    card.querySelector(".js-toggle").textContent = commentLabel(n);
+    const label = card.querySelector(".js-count-label");
+    if (!card.querySelector(".plus-btn")) label.textContent = commentLabel(n);
     if (on("openComments")) foldButton(card);
   }
 
@@ -576,6 +582,8 @@
     const open = box.querySelector("form");
     if (open) {
       open.remove();
+      const tray = box.querySelector(".sticker-tray");
+      if (tray) tray.remove();
       btn.setAttribute("aria-expanded", "false");
       box.hidden = !box.querySelector(".comment-list").children.length;
       return;
@@ -586,28 +594,55 @@
       box.prepend(list);
     }
     const form = commentForm(postId, list, card);
+    // Signed in, the stickers float right there above the box: no separate button.
+    if (btn.classList.contains("stick-btn")) box.append(stickerTray(card));
     box.append(form);
     box.hidden = false;
     btn.setAttribute("aria-expanded", "true");
-    form.querySelector("textarea").focus();
+    // The + grows into the box: replayed each time it opens.
+    box.classList.remove("is-opening");
+    void box.offsetWidth;
+    box.classList.add("is-opening");
+    // On a phone, focusing would throw the keyboard up over the stickers.
+    if (!matchMedia("(pointer: coarse)").matches) form.querySelector("textarea").focus();
   }
 
   function commentForm(postId, list, card) {
     let rid = null;
     const id = "cf-" + postId;
-    const input = h("textarea", { id: id, rows: "2", maxlength: "1000", required: true });
-    const name = h("input", { type: "text", maxlength: "32", autocomplete: "nickname", placeholder: "Your name", "aria-label": "Your name" });
+    const pill = on("pillComments");
+    // Signed in, comments go under the account's name, so there's no name box.
+    const account = PBAuth.user();
+    const accountName = account && String(account.name || "").trim().length >= 2 ? String(account.name).trim() : "";
+    const input = h("textarea", { id: id, rows: pill ? "1" : "2", maxlength: "1000", required: true, placeholder: pill ? "Add a comment…" : null });
+    const name = h("input", { type: "text", maxlength: "32", autocomplete: "nickname", placeholder: pill ? "Name" : "Your name", "aria-label": "Your name", class: pill ? "pill-name" : null });
     name.value = savedName();
     const status = h("p", { class: "status", role: "status", "aria-live": "polite" });
-    const btn = h("button", { class: "btn btn-small btn-primary", type: "submit" }, "SEND");
+    const btn = pill
+      ? h("button", { class: "pill-send", type: "submit", "aria-label": "Send", title: "Send" }, h("span", { "aria-hidden": "true" }, "↑"))
+      : h("button", { class: "btn btn-small btn-primary", type: "submit" }, "SEND");
     input.addEventListener("input", () => { rid = null; });
-    const form = h("form", { class: "comment-form", novalidate: true },
-      h("label", { class: "visually-hidden", for: id }, "Write a comment"),
-      name, h("div", { class: "row" }, input, btn), status);
+    let form;
+    if (pill) {
+      // One line that grows with what's typed, up to a few lines.
+      const grow = () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 120) + "px"; };
+      input.addEventListener("input", grow);
+      // Enter sends; Shift+Enter is a new line.
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); form.requestSubmit(); }
+      });
+      form = h("form", { class: "comment-form pill-form", novalidate: true },
+        h("label", { class: "visually-hidden", for: id }, "Write a comment"),
+        h("div", { class: "pill-row" }, accountName ? null : name, h("div", { class: "pill" }, input, btn)), status);
+    } else {
+      form = h("form", { class: "comment-form", novalidate: true },
+        h("label", { class: "visually-hidden", for: id }, "Write a comment"),
+        name, h("div", { class: "row" }, input, btn), status);
+    }
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const body = input.value.trim();
-      const who = name.value.trim();
+      const who = accountName && pill ? accountName : name.value.trim();
       if (!body) { status.textContent = "Write something first."; input.focus(); return; }
       if (who.length < 2) { status.textContent = "Add your name."; name.focus(); return; }
       if (!rid) rid = requestId();
@@ -617,9 +652,10 @@
           method: "POST", body: { body: body, name: who, request_id: rid },
         });
         rid = null;
-        rememberName(who);
-        if (!$("name").value) $("name").value = who;
+        if (!(accountName && pill)) rememberName(who);
+        if ($("name") && !$("name").value) $("name").value = who;
         input.value = "";
+        input.style.height = "";
         status.textContent = "";
         if (!res.replayed) {
           const at = form.closest(".card") || card;
@@ -645,7 +681,7 @@
     return form;
   }
 
-  // ── stickers (everyone sees them; only the owner places them, for now) ───
+  // ── stickers (everyone sees them; anyone signed in places them) ────────
   // Hand-drawn hearts and stars stuck anywhere on a post, one each per post. Pick one
   // up from the dock (or your own off its post) and it follows the mouse or finger; let
   // go over a post to stick it there, in place of the one you had on it. Dragging
@@ -703,58 +739,44 @@
     return h("div", { class: "sticker-layer" }, p.stickers.filter((s) => kindOf(s.kind)).map((s) => placedSticker(p.id, s)));
   }
 
-  // ── the STICKER button on a post (stickerButton) ──────────────────────────
-  // Opens a row of every kind under the post's buttons. Tap one and it sticks on that
-  // post straight away; drag one and it goes wherever it's let go, like the dock.
+  // ── stickers in the comment box (stickerButton) ───────────────────────────
+  // Signed in, + COMMENT opens the comment box with a row of every kind above it. Tap
+  // one and it sticks on that post straight away; drag one and it goes wherever it's
+  // let go. Picked up, it leaves its spot in the row empty until it's let go, as if
+  // it had really been peeled off.
 
-  function toggleTray(card, btn) {
-    const open = card.querySelector(".sticker-tray");
-    if (open) {
-      open.remove();
-      btn.setAttribute("aria-expanded", "false");
-      return;
-    }
+  function stickerTray(card) {
     const tray = h("div", { class: "sticker-tray", role: "group", "aria-label": "Stick a sticker on this post" },
       KINDS.map((k) => h("button", {
-        class: "btn sticker-pick", type: "button", title: k.label + ": tap to stick it here, or drag it",
+        class: "sticker-pick", type: "button", title: k.label + ": tap to stick it here, or drag it",
         onpointerdown: (ev) => {
           if (carry || ev.button > 0) return;
           ev.preventDefault();
+          const pick = ev.currentTarget;
           startCarry(k.id, ev, null);
           carry.home = card;
+          carry.pick = pick;
+          pick.classList.add("is-taken");
         },
         onclick: (ev) => {
           if (carry || ev.detail !== 0) return; // keyboard: stick it here
           stickHere(card, k.id);
         },
       }, h("img", { src: stickerSrc(k.id), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, k.label))));
-    card.querySelector(".card-actions").after(tray);
-    btn.setAttribute("aria-expanded", "true");
+    [...tray.children].forEach((b, i) => b.style.setProperty("--i", i));
+    return tray;
   }
 
-  // The button shows the newest stickers (uploads come last in KINDS), so a new one
-  // is visible on every post as soon as it's uploaded.
-  function stickButton() {
+  // The comment button shows the newest stickers (uploads come last in KINDS), so a
+  // new one is visible on every post as soon as it's added.
+  function stickStack() {
     const newest = KINDS.slice().reverse().slice(0, 3);
-    return h("button", {
-      class: "btn btn-small btn-tiny js-stick stick-btn", type: "button", "aria-expanded": "false",
-      "aria-label": "Stick a sticker on this post", title: "Stickers",
-      onclick: (ev) => toggleTray(ev.currentTarget.closest(".card"), ev.currentTarget),
-    }, h("span", { class: "stick-stack", "aria-hidden": "true" }, newest.map((k) => h("img", { src: stickerSrc(k.id), alt: "" }))),
-    h("span", { "aria-hidden": "true" }, "+"));
-  }
-
-  function closeTray(card) {
-    const tray = card && card.querySelector(".sticker-tray");
-    if (tray) tray.remove();
-    const btn = card && card.querySelector(".js-stick");
-    if (btn) btn.setAttribute("aria-expanded", "false");
+    return h("span", { class: "stick-stack", "aria-hidden": "true" }, newest.map((k) => h("img", { src: stickerSrc(k.id), alt: "" })));
   }
 
   // Somewhere near the top right of the post, a little different each time.
   function stickHere(card, kind) {
     const r = card.getBoundingClientRect();
-    closeTray(card);
     drop(r.left + r.width * (0.6 + Math.random() * 0.28), r.top + 36 + Math.random() * 40,
       { card: card, kind: kind, rot: Math.round(Math.random() * 24 - 12) });
   }
@@ -859,6 +881,13 @@
     window.removeEventListener("keydown", onCarryKey, true);
     document.body.classList.remove("is-sticking");
     if (c.target) c.target.classList.remove("sticker-target");
+    if (c.pick) {
+      // Back in its spot in the row, gently.
+      const pick = c.pick;
+      pick.classList.remove("is-taken");
+      pick.classList.add("is-back");
+      pick.addEventListener("animationend", () => pick.classList.remove("is-back"), { once: true });
+    }
     c.el.remove();
     return c;
   }
@@ -874,7 +903,6 @@
     const c = onto || endCarry();
     const card = onto ? onto.card : cardAt(x, y);
     const from = onto ? null : c.from;
-    if (!onto && c.home) closeTray(c.home);
     try {
       if (!card) {
         if (!from) return;
@@ -998,6 +1026,24 @@
     if (misc) misc.hidden = !on("miscPage");
     $("account").setAttribute("aria-label", user ? "Signed in as " + name : "Sign in");
     closeMenu();
+    if (user && on("profilePics")) showAccountPic(user.id);
+  }
+
+  // Your own picture in the top bar, once the server says what it is.
+  async function showAccountPic(id) {
+    let pic = "";
+    try { pic = (await api("/api/cymbal/me/profile")).pic; } catch (_) { return; }
+    const u = PBAuth.user();
+    if (!u || u.id !== id) return; // signed out or switched while it loaded
+    const old = $("account-avatar");
+    if (!safePic(pic)) {
+      if (old.tagName === "IMG") showAccount(u); // the picture was just removed
+      return;
+    }
+    const img = picAvatar(pic);
+    img.id = "account-avatar";
+    img.classList.add("account-avatar");
+    old.replaceWith(img);
   }
 
   $("account").addEventListener("click", () => {
@@ -1591,7 +1637,7 @@
     });
   }
 
-  // ── misc page: your picture, most reacts, and (owner) sticker uploads ─────
+  // ── misc page: your picture, most reacts, and stickers people submit ──────
 
   // A picture straight from a phone is often several megabytes, so it's cropped to a
   // centred square and shrunk to 256px here before it's sent. Read as a data: URL,
@@ -1616,9 +1662,12 @@
     });
   }
 
+  // Signed in only: the picture belongs to the account.
   async function loadProfile() {
     const box = $("profile");
     if (!box) return;
+    if (!memberNow) { box.hidden = true; box.replaceChildren(); return; }
+    box.hidden = false;
     let pic = "";
     try { pic = (await api("/api/cymbal/me/profile")).pic; } catch (_) { /* shown as none */ }
     const status = h("p", { id: "profile-status", class: "status", role: "status", "aria-live": "polite" });
@@ -1634,6 +1683,7 @@
         body.append("image", await squarePicture(f), "me.jpg");
         await api("/api/cymbal/me/profile", { method: "POST", body: body });
         await loadProfile();
+        if (PBAuth.user()) showAccountPic(PBAuth.user().id);
         say("profile-status", "Saved. Your posts show it now.", "ok");
       } catch (err) {
         say("profile-status", err.message, "error");
@@ -1655,10 +1705,10 @@
               try {
                 await api("/api/cymbal/me/profile", { method: "DELETE" });
                 await loadProfile();
+                if (PBAuth.user()) showAccountPic(PBAuth.user().id);
                 say("profile-status", "Picture removed.", "ok");
               } catch (err) { say("profile-status", err.message, "error"); }
             } }, "remove") : null))),
-      h("p", { class: "small" }, "This picture belongs to this browser: it shows on posts you make from here."),
       status);
   }
 
@@ -1671,7 +1721,7 @@
       box.replaceChildren(h("h2", { class: "label" }, "MOST REACTS"), h("p", { class: "status is-error" }, err.message));
       return;
     }
-    const rows = data.posts.map((p, i) => h("li", { class: "board-row" },
+    const rows = data.posts.slice(0, 3).map((p, i) => h("li", { class: "board-row" },
       h("span", { class: "board-rank" }, String(i + 1)),
       h("span", { class: "board-song" },
         h("strong", null, extLink(p.url, p.title || "Untitled")),
@@ -1685,17 +1735,19 @@
       rows.length ? h("ol", { class: "board" }, rows) : h("p", { class: "small" }, "No reacts yet. Stick something on a post."));
   }
 
+  // Anyone signed in submits a few; only the owner removes one.
   async function loadStickerAdmin() {
     const box = $("sticker-admin");
     if (!box) return;
+    if (!memberNow) { box.hidden = true; box.replaceChildren(); return; }
     box.hidden = false;
     await loadKinds();
     const status = h("p", { id: "sticker-status", class: "status", role: "status", "aria-live": "polite" });
-    const label = h("input", { id: "sticker-label", type: "text", maxlength: "32", placeholder: "Name, e.g. A blue moon", required: true });
+    const label = h("input", { id: "sticker-label", type: "text", maxlength: "32", placeholder: "Sticker name, e.g. A blue moon", required: true });
     const file = h("input", { id: "sticker-file", type: "file", accept: "image/png", required: true });
     const go = h("button", { class: "btn btn-small btn-primary", type: "submit" }, "UPLOAD");
     const form = h("form", { class: "sticker-upload", novalidate: true },
-      h("label", { class: "label", for: "sticker-label" }, "STICKER NAME"), label,
+      h("label", { class: "visually-hidden", for: "sticker-label" }, "Sticker name"), label,
       h("label", { class: "label", for: "sticker-file" }, "PNG ", h("span", { class: "label-note" }, "up to 1 MB; a transparent background works best")), file,
       h("div", { class: "row" }, go), status);
     form.addEventListener("submit", async (ev) => {
@@ -1710,26 +1762,27 @@
       go.disabled = true;
       say("sticker-status", "Uploading…");
       try {
-        await api("/api/cymbal/owner/sticker-kinds", { method: "POST", body: body });
+        await api("/api/cymbal/sticker-kinds", { method: "POST", body: body });
         await loadStickerAdmin();
-        say("sticker-status", "Added. It's in every post's sticker row now.", "ok");
+        say("sticker-status", "Added. Everyone can stick it on posts now.", "ok");
       } catch (err) {
         say("sticker-status", err.message, "error");
       } finally {
         go.disabled = false;
       }
     });
-    const list = h("ul", { class: "kind-list" }, KINDS.map((k) => h("li", { class: "kind" },
+    const uploads = KINDS.filter((k) => k.uploaded);
+    const list = uploads.length ? h("ul", { class: "kind-list" }, uploads.map((k) => h("li", { class: "kind" },
       h("img", { src: stickerSrc(k.id), alt: "" }),
       h("span", null, k.label),
-      k.uploaded ? h("button", { class: "link-btn", type: "button", onclick: async () => {
+      ownerNow ? h("button", { class: "link-btn", type: "button", onclick: async () => {
         if (!confirm("Remove the " + k.label + " sticker? It comes off every post it's on.")) return;
         try {
           await api("/api/cymbal/owner/sticker-kinds/" + encodeURIComponent(k.id), { method: "DELETE" });
           await loadStickerAdmin();
         } catch (err) { say("sticker-status", err.message, "error"); }
-      } }, "remove") : h("span", { class: "small" }, "built in"))));
-    box.replaceChildren(h("h2", { class: "label" }, "STICKERS"), list, form);
+      } }, "remove") : null))) : null;
+    box.replaceChildren(...[h("h2", { class: "label" }, "SUBMIT YOUR OWN STICKER"), form, list].filter(Boolean));
   }
 
   // ── boot ──────────────────────────────────────────────────────────────────
@@ -1738,7 +1791,6 @@
   applyFeatures();
   const kindsReady = loadKinds();
   if (PAGE === "misc") {
-    loadProfile();
     loadPlaylists();
     kindsReady.then(loadLeaderboard);
   }
@@ -1778,13 +1830,12 @@
       // drains from the feed page in an authorised browser.
       if (miscHere || !on("miscPage")) loadOwner();
       else appleAutoStart();
-      if (miscHere) loadStickerAdmin();
     } else {
       $("owner").hidden = true;
       $("owner").replaceChildren();
-      if ($("sticker-admin")) { $("sticker-admin").hidden = true; $("sticker-admin").replaceChildren(); }
       stopApple();
     }
+    if (miscHere) { loadProfile(); loadStickerAdmin(); }
     // Remove buttons, stickers and features depend on who is looking, so redraw when
     // that changes.
     const who = owner ? "owner" : user ? "user:" + user.id : "";

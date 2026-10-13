@@ -23,4 +23,6 @@ const FEATURES = {
   compactTop: "members",      // a shorter top bar and composer on phones
   compactCards: "members",    // tighter posts: remove at the top right, no source label or
                               // playlist chips, smaller caption and title, flatter buttons
+  pillComments: "all",        // the comment box looks like a message box: one line that grows,
+                              // a small send button, and a small name box only when signed out
 };
