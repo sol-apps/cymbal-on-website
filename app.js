@@ -763,7 +763,11 @@
           stickHere(card, k.id);
         },
       }, h("img", { src: stickerSrc(k.id), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, k.label))));
-    [...tray.children].forEach((b, i) => b.style.setProperty("--i", i));
+    // Each sticker sits at its own slight angle, fresh every time the box opens.
+    [...tray.children].forEach((b, i) => {
+      b.style.setProperty("--i", i);
+      b.style.setProperty("--lean", Math.round(Math.random() * 20 - 10) + "deg");
+    });
     return tray;
   }
 
