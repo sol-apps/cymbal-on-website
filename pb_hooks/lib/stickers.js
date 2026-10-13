@@ -15,7 +15,8 @@ const BUILT_IN = [
   { id: "star", label: "A silver star", src: "stickers/star.png" },
 ];
 const PER_POST = 50;
-const MAX_KINDS = 24;
+const MAX_KINDS = 48;
+const PER_ACCOUNT = 3;   // stickers each account can submit; the owner has no limit
 const OWNER = "owner";
 
 function util() {
@@ -152,9 +153,13 @@ function kinds(app) {
   };
 }
 
-// POST /api/cymbal/owner/sticker-kinds  multipart: label, image (a PNG up to 1 MB)
+// POST /api/cymbal/sticker-kinds  multipart: label, image (a PNG up to 1 MB)
 function addKind(app, e) {
   const u = util();
+  const owner = u.isOwner(e);
+  if (!owner && app.countRecords("sticker_kinds", $dbx.hashExp({ author: e.auth.id })) >= PER_ACCOUNT) {
+    throw new BadRequestError("You've submitted " + PER_ACCOUNT + " stickers already.");
+  }
   const body = e.requestInfo().body || {};
   const label = u.cleanText(body.label, 32, "A sticker name");
   if (label.length < 2) throw new BadRequestError("Give the sticker a name of at least 2 characters.");
@@ -165,6 +170,7 @@ function addKind(app, e) {
   const rec = new Record(app.findCollectionByNameOrId("sticker_kinds"));
   rec.set("label", label);
   rec.set("image", files[0]);
+  rec.set("author", e.auth.id);
   try {
     app.save(rec);
   } catch (err) {

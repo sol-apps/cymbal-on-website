@@ -514,27 +514,34 @@ test("the feed carries the first three comments, and whether an account posted",
   assert.ok(!JSON.stringify(r.json).includes(U.owner.id), "never says which account");
 });
 
-test("sticker uploads: the owner adds PNGs, everyone sees them, removing one takes its stickers", async () => {
+test("sticker uploads: anyone signed in submits a few PNGs, everyone sees them, only the owner removes one", async () => {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
   const upload = async (token, label, bytes, type) => {
     const fd = new FormData();
     fd.append("label", label);
     fd.append("image", new Blob([bytes], { type }), "s.png");
-    const res = await fetch(BASE + "/api/cymbal/owner/sticker-kinds", { method: "POST", headers: token ? { Authorization: token } : {}, body: fd });
+    const res = await fetch(BASE + "/api/cymbal/sticker-kinds", { method: "POST", headers: token ? { Authorization: token } : {}, body: fd });
     return { status: res.status, json: await res.json().catch(() => null) };
   };
   assert.equal((await upload("", "Moon", png, "image/png")).status, 401);
-  assert.equal((await upload(U.member.token, "Moon", png, "image/png")).status, 403);
   assert.equal((await upload(U.owner.token, "Moon", Buffer.from("not a png"), "text/plain")).status, 400);
   const moon = await upload(U.owner.token, "Moon", png, "image/png");
   assert.equal(moon.status, 200, JSON.stringify(moon.json));
   const kind = moon.json.kind;
   assert.match(kind.id, /^u_[a-z0-9]{15}$/);
 
+  // A member gets three; the owner has no such limit.
+  for (const n of [1, 2, 3]) assert.equal((await upload(U.member.token, "Mem " + n, png, "image/png")).status, 200);
+  const fourth = await upload(U.member.token, "Mem 4", png, "image/png");
+  assert.equal(fourth.status, 400, "three each");
+  assert.match(fourth.json.message, /3 stickers/);
+  assert.equal((await upload(U.owner.token, "Sun", png, "image/png")).status, 200);
+
   const kinds = (await call("GET", "/api/cymbal/sticker-kinds")).json.kinds;
   assert.deepEqual(kinds.map((k) => k.id).slice(0, 2), ["heart", "star"]);
   const listed = kinds.find((k) => k.id === kind.id);
   assert.equal(listed.label, "Moon");
+  assert.ok(!JSON.stringify(kinds).includes(U.member.id), "nobody can tell who submitted what");
   const img = await fetch(BASE + listed.src);
   assert.equal(img.status, 200, "anyone can load the image");
 
@@ -550,41 +557,50 @@ test("sticker uploads: the owner adds PNGs, everyone sees them, removing one tak
   assert.deepEqual([row.reacts, row.kinds[kind.id]], [1, 1]);
   assert.ok(!board.text.includes("author_key") && !board.text.includes("ip_hash"));
 
-  assert.equal((await call("DELETE", "/api/cymbal/owner/sticker-kinds/" + kind.id, { token: U.member.token })).status, 403);
+  const theirs = kinds.find((k) => k.label === "Mem 1");
+  assert.equal((await call("DELETE", "/api/cymbal/owner/sticker-kinds/" + theirs.id, { token: U.member.token })).status, 403, "not even your own");
+  for (const k of kinds.filter((k) => k.uploaded && k.id !== kind.id)) {
+    assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + k.id)).status, 200);
+  }
   assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + kind.id)).status, 200);
   assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + kind.id)).status, 404);
   const after = (await call("GET", "/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
   assert.deepEqual(after.stickers, []);
 });
 
-test("profile pictures: any browser sets its own, and its posts show it", async () => {
+test("profile pictures: an account sets its own, and the posts it makes show it", async () => {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
   const upload = async (who, bytes, type) => {
     const fd = new FormData();
     fd.append("image", new Blob([bytes], { type }), "me.png");
     const headers = { "CF-Connecting-IP": U[who].ip };
     if (U[who].key) headers["X-Cymbal-Key"] = U[who].key;
+    if (U[who].token) headers.Authorization = U[who].token;
     const res = await fetch(BASE + "/api/cymbal/me/profile", { method: "POST", headers, body: fd });
     return { status: res.status, json: await res.json().catch(() => null) };
   };
-  assert.equal((await upload("nokey", png, "image/png")).status, 400, "a browser key is needed");
-  assert.equal((await upload("ann", Buffer.from("nope"), "text/plain")).status, 400);
-  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, "");
-  const set = await upload("ann", png, "image/png");
+  assert.equal((await upload("ann", png, "image/png")).status, 401, "a browser alone can't have one");
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).status, 401);
+  assert.equal((await upload("member", Buffer.from("nope"), "text/plain")).status, 400);
+  assert.equal((await as("member").get("/api/cymbal/me/profile")).json.pic, "");
+  const set = await upload("member", png, "image/png");
   assert.equal(set.status, 200, JSON.stringify(set.json));
   assert.match(set.json.pic, /^\/api\/files\/profiles\/[a-z0-9]{15}\//);
   assert.equal((await fetch(BASE + set.json.pic)).status, 200);
-  assert.equal((await upload("ann", png, "image/png")).status, 429, "not again straight away");
-  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, set.json.pic);
-  assert.equal((await as("ben").get("/api/cymbal/me/profile")).json.pic, "", "another browser has its own");
+  assert.equal((await upload("member", png, "image/png")).status, 429, "not again straight away");
+  assert.equal((await as("member").get("/api/cymbal/me/profile")).json.pic, set.json.pic);
+  assert.equal((await as("owner").get("/api/cymbal/me/profile")).json.pic, "", "another account has its own");
 
+  const signedIn = await share("member", "https://open.spotify.com/track/" + randomSpotifyId(), "with a face");
+  // The same browser, signed out: no picture, because the picture is the account's.
+  const signedOut = await call("POST", "/api/cymbal/posts", { key: U.member.key, ip: U.member.ip, body: { url: spUrl(randomSpotifyId()), name: "Mem", request_id: rid() } });
+  assert.equal(signedOut.status, 200, signedOut.text);
   const feed = (await call("GET", "/api/cymbal/feed")).json.posts;
-  const anns = feed.filter((p) => p.poster === "Ann");
-  assert.ok(anns.length && anns.every((p) => p.pic === set.json.pic), "Ann's posts show her picture");
-  assert.ok(feed.filter((p) => p.poster === "Ben").every((p) => p.pic === ""));
+  assert.equal(feed.find((p) => p.id === signedIn.id).pic, set.json.pic, "posts made signed in show it");
+  assert.equal(feed.find((p) => p.id === signedOut.json.post.id).pic, "", "posts made signed out don't");
 
-  assert.equal((await as("ann").del("/api/cymbal/me/profile")).status, 200);
-  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, "");
+  assert.equal((await as("member").del("/api/cymbal/me/profile")).status, 200);
+  assert.equal((await as("member").get("/api/cymbal/me/profile")).json.pic, "");
   for (const token of [U.member.token, U.owner.token, ""]) {
     assert.equal((await call("GET", "/api/collections/profiles/records", { token })).status, 403);
   }

@@ -485,25 +485,32 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .ff-smallStickers .sticker { width: 51px; }
 .ff-smallStickers .sticker-carry { width: 58px; }
 
-/* stickerMotion, after iMessage stickers: picked up, a sticker lifts a little off the
- * page with a soft shadow under it; let go, it presses down onto the post and settles,
- * with the shadow tightening as it lands. No bounce, no wiggle. */
+/* stickerMotion, after iMessage stickers: a sticker is a thin thing stuck flat, so it
+ * barely has a shadow. Picked up, it lifts a touch with a soft wave through it; let go,
+ * it floops down: a quick, very small ripple as it settles flat onto the post. */
+.ff-stickerMotion .sticker-placed { filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22)); }
 .ff-stickerMotion .sticker-carry {
-  scale: 1.08;
-  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .22));
-  animation: sticker-lift .16s ease-out;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .16));
+  transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.05);
+  animation: sticker-lift .32s ease-out;
 }
-.ff-stickerMotion .sticker-placed.is-new { animation: sticker-press .28s cubic-bezier(.3, .7, .4, 1); }
+.ff-stickerMotion .sticker-placed.is-new { animation: sticker-floop .5s cubic-bezier(.25, .7, .35, 1); }
 .ff-stickerMotion .sticker-placed.is-mine { transition: scale .15s ease-out; }
 .ff-stickerMotion .sticker-placed.is-mine:hover { scale: 1.03; }
 @keyframes sticker-lift {
-  from { scale: 1; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .2)); }
-  to { scale: 1.08; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .22)); }
+  0% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1) skew(0deg, 0deg); }
+  45% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.06) skew(2deg, -1deg); }
+  100% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.05) skew(0deg, 0deg); }
 }
-@keyframes sticker-press {
-  0% { scale: 1.08; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .22)); }
-  60% { scale: .97; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .25)); }
-  100% { scale: 1; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .25)); }
+@keyframes sticker-floop {
+  0% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.05) skew(0deg, 0deg); }
+  30% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(.985) skew(-2.5deg, 1deg); }
+  55% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.008) skew(1.5deg, -.6deg); }
+  78% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1) skew(-.6deg, .2deg); }
+  100% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1) skew(0deg, 0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-stickerMotion .sticker-carry, .ff-stickerMotion .sticker-placed.is-new, .sticker-tray .sticker-pick.is-back img { animation: none; }
 }
 
 /* plusComment, stickerButton: the card's small buttons. */
@@ -512,9 +519,19 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .stick-stack { display: inline-flex; }
 .stick-stack img { width: 20px; height: 20px; object-fit: contain; margin: -4px 0; }
 .stick-stack img + img { margin-left: -8px; }
-.sticker-tray { display: flex; flex-wrap: wrap; gap: 8px; }
-.sticker-tray .sticker-pick { width: 50px; height: 50px; }
-.sticker-tray .sticker-pick img { width: 34px; height: 34px; }
+/* The stickers in the comment box: just the stickers, no buttons around them. Picked
+ * up, one leaves its spot empty until it's let go. */
+.sticker-tray { display: flex; flex-wrap: wrap; gap: 2px; margin: -2px -4px 0; }
+.sticker-tray .sticker-pick {
+  width: 46px; height: 46px; padding: 4px; border: 0; border-radius: 10px;
+  background: transparent; cursor: grab;
+}
+.sticker-tray .sticker-pick:hover { background: var(--panel-2); }
+.sticker-tray .sticker-pick:focus-visible { outline: 3px solid var(--focus); }
+.sticker-tray .sticker-pick img { width: 36px; height: 36px; transition: opacity .1s; }
+.sticker-tray .sticker-pick.is-taken img { opacity: 0; }
+.sticker-tray .sticker-pick.is-back img { animation: sticker-back .22s ease-out; }
+@keyframes sticker-back { from { opacity: 0; scale: .6; } to { opacity: 1; scale: 1; } }
 
 /* listenCount */
 .listens { white-space: nowrap; }
@@ -605,12 +622,11 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .kind { display: flex; gap: 10px; align-items: center; font-size: 14px; }
 .kind img { width: 40px; height: 40px; object-fit: contain; }
 .kind > span:first-of-type { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-.sticker-upload { display: grid; gap: 4px; border-top: 2px dashed var(--line); padding-top: 10px; }
+.sticker-upload { display: grid; gap: 4px; }
+.sticker-admin .kind-list { border-top: 2px dashed var(--line); padding-top: 10px; margin: 0; }
 .sticker-upload input[type="file"] { font: inherit; font-size: 13px; margin-bottom: 6px; max-width: 100%; }
 .sticker-upload .row { display: flex; justify-content: flex-end; }
-.ff-compactCards .sticker-tray { gap: 6px; }
-.ff-compactCards .sticker-tray .sticker-pick { width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 3px; border-width: 2px; box-shadow: 2px 2px 0 var(--line); }
-.ff-compactCards .sticker-tray .sticker-pick img { width: 28px; height: 28px; }
+
 @media (max-width: 559px) {
   /* The link box stands on its own: no panel around it until there's a link in it. */
   .ff-compactTop .composer:has(.composer-more[hidden]) { background: transparent; border: 0; box-shadow: none; padding: 0; }
@@ -619,3 +635,28 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 }
 .profile .status:empty { min-height: 0; margin-top: 0; }
 .profile .small { margin: 0; }
+
+/* compactTop: the top bar's links are plain, not buttons. MISC is a word and your
+ * account is just your picture (or letter). Phones get a shorter bar. */
+.ff-compactTop .top-actions { gap: 4px; }
+.ff-compactTop .top-actions .btn {
+  border: 0; background: transparent; box-shadow: none;
+  min-height: 36px; min-width: 36px; padding: 4px 8px; border-radius: 999px;
+}
+.ff-compactTop .top-actions .btn:hover { background: var(--panel-2); }
+.ff-compactTop .top-actions .btn:active { transform: none; }
+.ff-compactTop .account-btn .account-avatar { width: 30px; height: 30px; font-size: 11px; margin: 0; }
+.ff-compactTop .account-btn { padding: 3px; }
+.ff-compactTop .account-label { display: none; }
+@media (max-width: 559px) {
+  .ff-compactTop .top-inner { min-height: 42px; }
+  .ff-compactTop .brand { gap: 7px; }
+}
+
+/* Phones: the hard offset shadow is halved on posts and panels, and gone from things
+ * that don't press. Sol's other sites keep the full shadow everywhere, so there was
+ * nothing to copy; this keeps the look but stops it crowding a narrow screen. */
+@media (max-width: 559px) {
+  .ff-compactCards .card.panel { box-shadow: 2px 2px 0 var(--line); border-width: 2px; }
+  .ff-compactCards .misc .panel { box-shadow: 2px 2px 0 var(--line); border-width: 2px; }
+}

@@ -68,19 +68,6 @@ routerAdd("GET", "/api/cymbal/leaderboard", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").leaderboard(e.app));
 });
 
-// This browser's picture. The browser key (X-Cymbal-Key) says whose it is.
-routerAdd("GET", "/api/cymbal/me/profile", (e) => {
-  return e.json(200, require(__hooks + "/lib/profiles.js").get(e.app, e));
-});
-
-routerAdd("POST", "/api/cymbal/me/profile", (e) => {
-  return e.json(200, require(__hooks + "/lib/profiles.js").set(e.app, e));
-});
-
-routerAdd("DELETE", "/api/cymbal/me/profile", (e) => {
-  return e.json(200, require(__hooks + "/lib/profiles.js").clear(e.app, e));
-});
-
 routerAdd("POST", "/api/cymbal/signup", (e) => {
   const rec = require(__hooks + "/lib/accounts.js").signup(e.app, e);
   return $apis.recordAuthResponse(e, rec, "password", null);
@@ -104,6 +91,24 @@ routerAdd("POST", "/api/cymbal/stickers/{id}/move", (e) => {
 
 routerAdd("DELETE", "/api/cymbal/stickers/{id}", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").remove(e.app, e, e.request.pathValue("id")));
+}, $apis.requireAuth("users"));
+
+// Your account's picture, shown on the posts you make while signed in.
+routerAdd("GET", "/api/cymbal/me/profile", (e) => {
+  return e.json(200, require(__hooks + "/lib/profiles.js").get(e.app, e));
+}, $apis.requireAuth("users"));
+
+routerAdd("POST", "/api/cymbal/me/profile", (e) => {
+  return e.json(200, require(__hooks + "/lib/profiles.js").set(e.app, e));
+}, $apis.requireAuth("users"));
+
+routerAdd("DELETE", "/api/cymbal/me/profile", (e) => {
+  return e.json(200, require(__hooks + "/lib/profiles.js").clear(e.app, e));
+}, $apis.requireAuth("users"));
+
+// Anyone signed in can submit a sticker (a few each); only the owner removes one.
+routerAdd("POST", "/api/cymbal/sticker-kinds", (e) => {
+  return e.json(200, require(__hooks + "/lib/stickers.js").addKind(e.app, e));
 }, $apis.requireAuth("users"));
 
 // ── owner ───────────────────────────────────────────────────────────────────
@@ -199,11 +204,6 @@ routerAdd("POST", "/api/cymbal/owner/apple/complete", (e) => {
   require(__hooks + "/lib/util.js").requireOwner(e);
   const body = e.requestInfo().body || {};
   return e.json(200, require(__hooks + "/lib/sync.js").appleComplete(e.app, body.results));
-}, $apis.requireAuth("users"));
-
-routerAdd("POST", "/api/cymbal/owner/sticker-kinds", (e) => {
-  require(__hooks + "/lib/util.js").requireOwner(e);
-  return e.json(200, require(__hooks + "/lib/stickers.js").addKind(e.app, e));
 }, $apis.requireAuth("users"));
 
 routerAdd("DELETE", "/api/cymbal/owner/sticker-kinds/{id}", (e) => {
