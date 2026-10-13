@@ -269,7 +269,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .avatar {
   flex: none; width: 32px; height: 32px; border-radius: 50%;
   border: 3px solid var(--line); display: grid; place-items: center;
-  font-family: var(--label); font-size: 12px; color: #2b2b29;
+  font-family: var(--read); font-weight: 700; font-size: 13px; line-height: 1; color: #2b2b29;
+  /* Centre the capital itself, not the font's line box (where supported). */
+  text-box: trim-both cap alphabetic;
 }
 .av-0 { background: #D56062; color: #fffaf0; }
 .av-1 { background: #8fd3b6; }
@@ -468,7 +470,12 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .25));
 }
 .sticker-placed.is-mine { pointer-events: auto; cursor: grab; touch-action: none; }
-.sticker-carry { position: fixed; z-index: 1000; pointer-events: none; width: 72px; filter: drop-shadow(4px 6px 2px rgba(0, 0, 0, .3)); }
+.sticker-carry {
+  position: fixed; left: 0; top: 0; z-index: 1000; pointer-events: none; width: 72px;
+  transform: none; rotate: calc(var(--rot, 0deg) + var(--tilt, 0deg));
+  filter: drop-shadow(4px 6px 2px rgba(0, 0, 0, .3));
+  will-change: translate;
+}
 .sticker-dock {
   position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 900;
   display: flex; gap: 8px;
@@ -477,7 +484,10 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .sticker-pick img { width: 40px; height: 40px; object-fit: contain; pointer-events: none; }
 .is-sticking, .is-sticking * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; touch-action: none; }
 .is-sticking iframe { pointer-events: none; }
+.card { transition: box-shadow .2s ease-out; }
 .card.sticker-target { outline: 3px dashed var(--accent); outline-offset: 3px; }
+/* With stickerMotion, the post under a carried sticker just glows softly. */
+.ff-stickerMotion .card.sticker-target { outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent), 2px 2px 0 var(--line); }
 
 /* ── owner-only features (features.js puts ff-<name> on <html>) ────────── */
 
@@ -485,32 +495,34 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .ff-smallStickers .sticker { width: 51px; }
 .ff-smallStickers .sticker-carry { width: 58px; }
 
-/* stickerMotion, after iMessage stickers: a sticker is a thin thing stuck flat, so it
- * barely has a shadow. Picked up, it lifts a touch with a soft wave through it; let go,
- * it floops down: a quick, very small ripple as it settles flat onto the post. */
+/* stickerMotion, after iMessage stickers. A sticker is thin and stuck flat, so it has
+ * only a hairline shadow. Picked up, it rises a touch (a little bigger, a soft shadow
+ * under it) and leans into the way it's moved. Let go, it settles: it springs flat from
+ * however it was leaning, overshooting a hair and coming to rest, while its shadow
+ * tightens back to the hairline. Only transforms, opacity and one small filter move. */
 .ff-stickerMotion .sticker-placed { filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22)); }
 .ff-stickerMotion .sticker-carry {
-  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .16));
-  transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.05);
-  animation: sticker-lift .32s ease-out;
+  scale: 1.08;
+  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, .14));
+  transition: rotate .28s cubic-bezier(.22, 1, .36, 1);
+  animation: sticker-lift .3s cubic-bezier(.22, 1, .36, 1);
 }
-.ff-stickerMotion .sticker-placed.is-new { animation: sticker-floop .5s cubic-bezier(.25, .7, .35, 1); }
-.ff-stickerMotion .sticker-placed.is-mine { transition: scale .15s ease-out; }
-.ff-stickerMotion .sticker-placed.is-mine:hover { scale: 1.03; }
+.ff-stickerMotion .sticker-placed.is-new { animation: sticker-settle .62s linear both; }
+.ff-stickerMotion .sticker-placed.is-mine { transition: scale .2s cubic-bezier(.22, 1, .36, 1); }
+.ff-stickerMotion .sticker-placed.is-mine:hover { scale: 1.04; }
 @keyframes sticker-lift {
-  0% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1) skew(0deg, 0deg); }
-  45% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.06) skew(2deg, -1deg); }
-  100% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.05) skew(0deg, 0deg); }
+  from { scale: 1; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22)); }
 }
-@keyframes sticker-floop {
-  0% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.05) skew(0deg, 0deg); }
-  30% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(.985) skew(-2.5deg, 1deg); }
-  55% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1.008) skew(1.5deg, -.6deg); }
-  78% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1) skew(-.6deg, .2deg); }
-  100% { transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(1) skew(0deg, 0deg); }
+/* A damped spring, sampled: down past flat, a small rebound, rest. */
+@keyframes sticker-settle {
+  0%   { scale: 1.08;  rotate: var(--tilt0, 0deg); filter: drop-shadow(0 4px 5px rgba(0, 0, 0, .14)); animation-timing-function: cubic-bezier(.4, 0, .7, .4); }
+  22%  { scale: .965;  rotate: calc(var(--tilt0, 0deg) * -.25); filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22)); animation-timing-function: cubic-bezier(.3, .6, .6, 1); }
+  48%  { scale: 1.012; rotate: calc(var(--tilt0, 0deg) * .08); animation-timing-function: cubic-bezier(.35, 0, .6, 1); }
+  72%  { scale: .997;  rotate: 0deg; animation-timing-function: cubic-bezier(.35, 0, .6, 1); }
+  100% { scale: 1;     rotate: 0deg; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22)); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ff-stickerMotion .sticker-carry, .ff-stickerMotion .sticker-placed.is-new, .sticker-tray .sticker-pick.is-back img { animation: none; }
+  .ff-stickerMotion .sticker-carry, .ff-stickerMotion .sticker-placed.is-new, .sticker-tray .sticker-pick.is-back img { animation: none; transition: none; }
 }
 
 /* plusComment, stickerButton: the card's small buttons. */
@@ -701,11 +713,18 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   display: grid; place-items: center; cursor: pointer;
   border: 1.5px solid color-mix(in srgb, var(--line) 30%, transparent);
   background: var(--panel-2); color: var(--ink); font: 400 22px/1 var(--read);
-  transition: transform .25s cubic-bezier(.3, 1.4, .5, 1), background .15s;
+  transition: transform .34s cubic-bezier(.34, 1.4, .64, 1), background .15s;
 }
 .plus-btn:hover { background: color-mix(in srgb, var(--panel-2) 80%, var(--line)); }
 .plus-btn[aria-expanded="true"] { transform: rotate(45deg); }
-.plus-btn span { margin-top: -2px; }
+/* The + is drawn, not typed, so it sits dead centre whatever the font does. */
+.plus-btn { position: relative; }
+.plus-btn span { font-size: 0; }
+.plus-btn::before, .plus-btn::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 1.75px;
+  border-radius: 1px; background: currentColor; translate: -50% -50%;
+}
+.plus-btn::after { rotate: 90deg; }
 
 /* Stickers float over the box: no buttons around them. */
 .comments .sticker-tray { margin: 0 0 -2px -4px; gap: 4px; }
@@ -714,21 +733,33 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .comments .sticker-tray .sticker-pick img { width: 34px; height: 34px; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .2)); transition: transform .15s ease-out; }
 .comments .sticker-tray .sticker-pick:hover img { transform: translateY(-2px) scale(1.06); }
 
-/* Opening: the box grows out from the + and the stickers pop up one after another. */
-.comments.is-opening .pill-form { animation: pill-open .34s cubic-bezier(.2, .9, .25, 1.05) both; }
+/* Opening: the box eases out from the +, and the stickers rise into place one after
+ * another with a soft spring. Transforms and opacity only, so it stays smooth on a phone
+ * with players on the page. */
+.comments.is-opening .pill-form {
+  transform-origin: 16px 50%;
+  animation: pill-in .34s cubic-bezier(.22, 1, .36, 1) both;
+}
 .comments.is-opening .sticker-tray .sticker-pick {
-  animation: sticker-pop .36s cubic-bezier(.3, 1.5, .5, 1) both;
-  animation-delay: calc(60ms + var(--i, 0) * 35ms);
+  animation: sticker-rise .5s linear both;
+  animation-delay: calc(50ms + var(--i, 0) * 45ms);
 }
-@keyframes pill-open {
-  from { clip-path: inset(0 calc(100% - 34px) 0 0 round 20px); opacity: .4; }
-  to { clip-path: inset(0 0 0 0 round 20px); opacity: 1; }
+@keyframes pill-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.96, .9); }
 }
-@keyframes sticker-pop {
-  from { transform: translateY(10px) scale(.4); opacity: 0; }
-  to { transform: none; opacity: 1; }
+@keyframes sticker-rise {
+  0%   { opacity: 0; transform: translateY(8px) scale(.6); animation-timing-function: cubic-bezier(.2, .7, .4, 1); }
+  45%  { opacity: 1; transform: translateY(-1.5px) scale(1.05); animation-timing-function: cubic-bezier(.4, 0, .6, 1); }
+  75%  { transform: translateY(.5px) scale(.99); animation-timing-function: cubic-bezier(.4, 0, .6, 1); }
+  100% { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .comments.is-opening .pill-form, .comments.is-opening .sticker-tray .sticker-pick { animation: none; }
   .plus-btn { transition: none; }
 }
+
+/* compactCards: the name, the time and the caption's words share one left edge, and
+ * the bubble's point sits under the start of the name (or the middle of the picture). */
+.ff-compactCards .card-head > .who:first-child { padding-left: 10px; }
+.ff-compactCards .caption { margin-top: 2px; }
+.ff-compactCards .caption::before { left: 9px; }
