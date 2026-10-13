@@ -491,15 +491,16 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 
 /* ── owner-only features (features.js puts ff-<name> on <html>) ────────── */
 
-/* smallStickers: 20% smaller everywhere a sticker is drawn on a post. */
-.ff-smallStickers .sticker { width: 51px; }
-.ff-smallStickers .sticker-carry { width: 58px; }
+/* smallStickers: stickers on posts are 41px wide rather than 64px. */
+.ff-smallStickers .sticker { width: 41px; }
+.ff-smallStickers .sticker-carry { width: 46px; }
 
 /* stickerMotion, after iMessage stickers. A sticker is thin and stuck flat, so it has
  * only a hairline shadow. Picked up, it rises a touch (a little bigger, a soft shadow
- * under it) and leans into the way it's moved. Let go, it settles: it springs flat from
- * however it was leaning, overshooting a hair and coming to rest, while its shadow
- * tightens back to the hairline. Only transforms, opacity and one small filter move. */
+ * under it) and leans into the way it's moved. Let go, it peels down: one corner is
+ * still lifted and lays flat last, the lean straightens and the shadow tightens to the
+ * hairline. Nothing overshoots: once it's down, it's down. Only transforms, opacity and
+ * one small filter move. */
 .ff-stickerMotion .sticker-placed { filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22)); }
 .ff-stickerMotion .sticker-carry {
   scale: 1.08;
@@ -507,19 +508,32 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   transition: rotate .28s cubic-bezier(.22, 1, .36, 1);
   animation: sticker-lift .3s cubic-bezier(.22, 1, .36, 1);
 }
-.ff-stickerMotion .sticker-placed.is-new { animation: sticker-settle .62s linear both; }
+.ff-stickerMotion .sticker-placed.is-new { animation: sticker-peel .46s both; }
 .ff-stickerMotion .sticker-placed.is-mine { transition: scale .2s cubic-bezier(.22, 1, .36, 1); }
 .ff-stickerMotion .sticker-placed.is-mine:hover { scale: 1.04; }
 @keyframes sticker-lift {
   from { scale: 1; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22)); }
 }
-/* A damped spring, sampled: down past flat, a small rebound, rest. */
-@keyframes sticker-settle {
-  0%   { scale: 1.08;  rotate: var(--tilt0, 0deg); filter: drop-shadow(0 4px 5px rgba(0, 0, 0, .14)); animation-timing-function: cubic-bezier(.4, 0, .7, .4); }
-  22%  { scale: .965;  rotate: calc(var(--tilt0, 0deg) * -.25); filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22)); animation-timing-function: cubic-bezier(.3, .6, .6, 1); }
-  48%  { scale: 1.012; rotate: calc(var(--tilt0, 0deg) * .08); animation-timing-function: cubic-bezier(.35, 0, .6, 1); }
-  72%  { scale: .997;  rotate: 0deg; animation-timing-function: cubic-bezier(.35, 0, .6, 1); }
-  100% { scale: 1;     rotate: 0deg; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22)); }
+/* The body presses down first; the lifted corner follows and is the last part to lie
+ * flat. Every curve eases out, so it comes to rest without a rebound. */
+@keyframes sticker-peel {
+  0% {
+    scale: 1.08; rotate: var(--tilt0, 0deg);
+    transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) perspective(320px) rotate3d(1, -1, 0, 26deg);
+    filter: drop-shadow(0 4px 5px rgba(0, 0, 0, .14));
+    animation-timing-function: cubic-bezier(.3, .4, .5, 1);
+  }
+  45% {
+    scale: 1.01; rotate: calc(var(--tilt0, 0deg) * .2);
+    transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) perspective(320px) rotate3d(1, -1, 0, 11deg);
+    filter: drop-shadow(0 1.5px 1.5px rgba(0, 0, 0, .18));
+    animation-timing-function: cubic-bezier(.25, .6, .4, 1);
+  }
+  100% {
+    scale: 1; rotate: 0deg;
+    transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) perspective(320px) rotate3d(1, -1, 0, 0deg);
+    filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .22));
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .ff-stickerMotion .sticker-carry, .ff-stickerMotion .sticker-placed.is-new, .sticker-tray .sticker-pick.is-back img { animation: none; transition: none; }
@@ -727,10 +741,10 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .plus-btn::after { rotate: 90deg; }
 
 /* Stickers float over the box: no buttons around them. */
-.comments .sticker-tray { margin: 0 0 -2px -4px; gap: 4px; }
-.comments .sticker-tray .sticker-pick { width: 42px; height: 42px; padding: 3px; }
+.comments .sticker-tray { margin: -.5px 0 -2px -3.5px; gap: 4px; }
+.comments .sticker-tray .sticker-pick { width: 34px; height: 34px; padding: 3px; }
 .comments .sticker-tray .sticker-pick:hover { background: transparent; }
-.comments .sticker-tray .sticker-pick img { width: 34px; height: 34px; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .2)); transition: transform .15s ease-out; }
+.comments .sticker-tray .sticker-pick img { width: 27px; height: 27px; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .2)); transition: transform .15s ease-out; }
 .comments .sticker-tray .sticker-pick:hover img { transform: translateY(-2px) scale(1.06); }
 
 /* Opening: the box eases out from the +, and the stickers rise into place one after
