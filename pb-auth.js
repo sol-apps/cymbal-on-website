@@ -14,6 +14,8 @@
  *   PBAuth.getClient()              PocketBase client, authenticated if signed in
  *   PBAuth.signIn(email, password)  password sign-in (returns a promise)
  *   PBAuth.signUp(email, password, name)  make an account and sign in to it
+ *   PBAuth.requestReset(email)      email a "choose a new password" link
+ *   PBAuth.confirmReset(token, password)  set the new password from that link
  *   PBAuth.signOut()                clear the local session
  *   PBAuth.user()                   the signed-in record, or null
  *   PBAuth.isSignedIn()
@@ -117,6 +119,17 @@ const PBAuth = (() => {
     return user();
   }
 
+  // Always resolves the same way whether or not the email has an account, so the page
+  // can't be used to find out who has one.
+  async function requestReset(email) {
+    await client.collection('users').requestPasswordReset(String(email || '').trim().toLowerCase());
+  }
+
+  // The token comes from the emailed link. The new password doesn't sign anyone in.
+  async function confirmReset(token, password) {
+    await client.collection('users').confirmPasswordReset(String(token || ''), String(password || ''), String(password || ''));
+  }
+
   function signOut() {
     client.authStore.clear();
   }
@@ -134,5 +147,5 @@ const PBAuth = (() => {
     return client;
   }
 
-  return { getClient, signIn, signUp, signOut, user, isSignedIn, isAdmin, onChange };
+  return { getClient, signIn, signUp, requestReset, confirmReset, signOut, user, isSignedIn, isAdmin, onChange };
 })();
