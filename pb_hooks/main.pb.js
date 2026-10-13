@@ -68,6 +68,19 @@ routerAdd("GET", "/api/cymbal/leaderboard", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").leaderboard(e.app));
 });
 
+// "Forgot your password?" uses PocketBase's own reset (POST
+// /api/collections/users/request-password-reset, then confirm-password-reset). Its
+// email needs SMTP set in the dashboard (Settings > Mail settings). This only swaps the
+// email's link for one back to this site, where misc.html takes the new password.
+onMailerRecordPasswordResetSend((e) => {
+  const link = require(__hooks + "/lib/util.js").publicUrl() + "/misc.html#reset=" + encodeURIComponent(String(e.meta.token || ""));
+  e.message.subject = "Reset your Cymbal password";
+  e.message.html = "<p>Someone asked to reset the password for your Cymbal account.</p>" +
+    "<p><a href=\"" + link + "\">Choose a new password</a></p>" +
+    "<p>The link works once, for 30 minutes. If it wasn't you, ignore this email: nothing changes.</p>";
+  e.next();
+}, "users");
+
 routerAdd("POST", "/api/cymbal/signup", (e) => {
   const rec = require(__hooks + "/lib/accounts.js").signup(e.app, e);
   return $apis.recordAuthResponse(e, rec, "password", null);

@@ -262,7 +262,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .owner-login .row { display: flex; gap: 8px; justify-content: flex-end; }
 .owner-login .status:empty { min-height: 0; margin-top: 0; }
 .owner-login [hidden] { display: none; }
-.owner-login #owner-login-mode { justify-self: start; margin-top: 4px; }
+.owner-login #owner-login-mode, .owner-login #owner-login-forgot { justify-self: start; margin-top: 4px; }
 
 /* ── feed ───────────────────────────────────────────────────────────────── */
 

@@ -198,6 +198,8 @@
       tag.textContent = kind === "?" ? "Not a supported link" : kind;
       tag.className = "url-kind" + (kind === "?" ? " is-bad" : kind ? " is-good" : "");
       if (url) openComposer();
+      // Cleared with nothing else typed: fold back to the one field.
+      else if (!$("caption").value.trim()) $("composer-more").hidden = true;
       say("composer-status", "");
     });
     $("url").addEventListener("paste", () => setTimeout(() => { if ($("url").value.trim()) $("caption").focus(); }, 0));
@@ -1011,30 +1013,48 @@
   }
 
   // ── signing in ────────────────────────────────────────────────────────────
-  // One form for both: signing in to an account, or making one (with a name).
+  // One form for everything: signing in ("in"), making an account ("up", with a name),
+  // asking for a password reset link ("forgot", email only), and choosing a new
+  // password from that link ("reset", password only; misc.html#reset=<token>).
 
-  let signingUp = false;
+  let mode = "in";
+  let resetToken = "";
+  const MODES = {
+    in: { title: "SIGN IN", go: "SIGN IN", other: "New here? Make an account" },
+    up: { title: "MAKE AN ACCOUNT", go: "MAKE ACCOUNT", other: "Have an account? Sign in" },
+    forgot: { title: "RESET YOUR PASSWORD", go: "SEND LINK", other: "Remembered it? Sign in" },
+    reset: { title: "CHOOSE A NEW PASSWORD", go: "SAVE PASSWORD", other: "Back to sign in" },
+  };
 
-  function loginMode(up) {
-    signingUp = up;
-    $("owner-login-title").textContent = up ? "MAKE AN ACCOUNT" : "SIGN IN";
-    $("owner-name").hidden = !up;
-    document.querySelector('label[for="owner-name"]').hidden = !up;
-    $("owner-password").autocomplete = up ? "new-password" : "current-password";
-    $("owner-login-go").textContent = up ? "MAKE ACCOUNT" : "SIGN IN";
-    $("owner-login-mode").textContent = up ? "Have an account? Sign in" : "New here? Make an account";
+  function loginMode(m) {
+    mode = m;
+    const show = (id, on) => { $(id).hidden = !on; document.querySelector('label[for="' + id + '"]').hidden = !on; };
+    show("owner-name", m === "up");
+    show("owner-email", m !== "reset");
+    show("owner-password", m !== "forgot");
+    document.querySelector('label[for="owner-password"]').textContent = m === "reset" ? "NEW PASSWORD" : "PASSWORD";
+    $("owner-password").autocomplete = m === "in" ? "current-password" : "new-password";
+    $("owner-login-title").textContent = MODES[m].title;
+    $("owner-login-go").textContent = MODES[m].go;
+    $("owner-login-mode").textContent = MODES[m].other;
+    $("owner-login-forgot").hidden = m !== "in";
     say("owner-login-status", "");
   }
 
   function closeLogin() {
     $("owner-login").hidden = true;
     $("owner-password").value = "";
-    loginMode(false);
+    loginMode("in");
   }
 
   $("owner-login-mode").addEventListener("click", () => {
-    loginMode(!signingUp);
-    (signingUp ? $("owner-name") : $("owner-email")).focus();
+    loginMode(mode === "in" ? "up" : "in");
+    (mode === "up" ? $("owner-name") : $("owner-email")).focus();
+  });
+
+  $("owner-login-forgot").addEventListener("click", () => {
+    loginMode("forgot");
+    $("owner-email").focus();
   });
 
   // The top bar's account button: signed out it opens the sign-in form, signed in it
@@ -1106,27 +1126,58 @@
     const email = $("owner-email").value.trim();
     const password = $("owner-password").value;
     const name = $("owner-name").value.trim();
-    if (signingUp && name.length < 2) return say("owner-login-status", "Pick a name of at least 2 characters.", "error");
-    if (!email || !password) return say("owner-login-status", "Enter your email and password.", "error");
-    if (signingUp && password.length < 8) return say("owner-login-status", "Use a password of at least 8 characters.", "error");
+    const m = mode;
+    if (m === "up" && name.length < 2) return say("owner-login-status", "Pick a name of at least 2 characters.", "error");
+    if (m === "forgot" && !email) return say("owner-login-status", "Enter the email you signed up with.", "error");
+    if ((m === "in" || m === "up") && (!email || !password)) return say("owner-login-status", "Enter your email and password.", "error");
+    if ((m === "up" || m === "reset") && password.length < 8) return say("owner-login-status", "Use a password of at least 8 characters.", "error");
     const btn = $("owner-login-go");
     btn.disabled = true;
-    say("owner-login-status", signingUp ? "Making your account…" : "Signing in…");
+    say("owner-login-status", { in: "Signing in…", up: "Making your account…", forgot: "Sending…", reset: "Saving…" }[m]);
     try {
-      if (signingUp) await PBAuth.signUp(email, password, name);
-      else await PBAuth.signIn(email, password);
+      if (m === "up") await PBAuth.signUp(email, password, name);
+      else if (m === "in") await PBAuth.signIn(email, password);
+      else if (m === "forgot") {
+        await PBAuth.requestReset(email);
+        say("owner-login-status", "If there's an account for " + email.toLowerCase() + ", a link to choose a new password is on its way. Check your email.", "ok");
+        return;
+      } else {
+        await PBAuth.confirmReset(resetToken, password);
+        resetToken = "";
+        $("owner-password").value = "";
+        loginMode("in");
+        say("owner-login-status", "Password changed. Sign in with it now.", "ok");
+        $("owner-email").focus();
+        return;
+      }
       closeLogin();
     } catch (err) {
       const status = err && err.status;
       const msg = err && err.response && err.response.message;
       say("owner-login-status", status === 0 ? "Couldn't reach Cymbal. Check your connection."
-        : status === 429 ? (signingUp && msg ? msg : "Too many attempts. Wait a minute and try again.")
-        : signingUp ? (msg || "That account couldn't be made.")
+        : status === 429 ? (m === "up" && msg ? msg : "Too many attempts. Wait a minute and try again.")
+        : m === "up" ? (msg || "That account couldn't be made.")
+        : m === "forgot" ? "That didn't send. Try again in a couple of minutes."
+        : m === "reset" ? "That link has expired or was already used. Ask for a new one."
         : "That email and password didn't match.", "error");
     } finally {
       btn.disabled = false;
     }
   });
+
+  // Arriving from the reset email: misc.html#reset=<token>. The token leaves the address
+  // bar straight away so it isn't left in history or shared by accident.
+  function openReset() {
+    const m = /^#reset=([A-Za-z0-9._-]+)$/.exec(location.hash);
+    if (!m) return;
+    resetToken = m[1];
+    history.replaceState(null, "", location.pathname + location.search);
+    loginMode("reset");
+    $("owner-login").hidden = false;
+    $("owner-login").scrollIntoView({ block: "nearest" });
+  }
+  openReset();
+  window.addEventListener("hashchange", openReset);
 
   $("signout").addEventListener("click", () => PBAuth.signOut());
 
@@ -1875,7 +1926,7 @@
     memberNow = !!user;
     applyFeatures();
     showAccount(user);
-    if (user) closeLogin();
+    if (user && mode !== "reset") closeLogin();
     // A new account's name becomes the name it posts under, unless one is remembered.
     if (user && onFeed && !savedName() && user.name) { rememberName(user.name); $("name").value = user.name; showName(false); }
     showStickerDock(onFeed && !!user && !on("stickerButton"));
