@@ -152,7 +152,7 @@ test("anyone can read; nobody but the owner reaches the owner routes", async () 
 });
 
 test("the collection API stays closed to everyone but the superuser", async () => {
-  for (const c of ["posts", "comments", "playlist_syncs", "playlist_memberships", "provider_connections", "oauth_states", "stickers", "listens", "sticker_kinds"]) {
+  for (const c of ["posts", "comments", "playlist_syncs", "playlist_memberships", "provider_connections", "oauth_states", "stickers", "listens", "sticker_kinds", "profiles"]) {
     for (const token of [U.member.token, U.owner.token, ""]) {
       const list = await call("GET", "/api/collections/" + c + "/records", { token });
       assert.equal(list.status, 403, c + " list -> " + list.status);
@@ -496,17 +496,50 @@ test("sticker uploads: the owner adds PNGs, everyone sees them, removing one tak
   assert.equal(stuck.json.sticker.kind, kind.id);
   assert.equal((await as("owner").post("/api/cymbal/owner/posts/" + post.id + "/stickers", { kind: "u_aaaaaaaaaaaaaaa", x: 0.5, y: 30 })).status, 400);
 
-  const board = await as("owner").get("/api/cymbal/owner/leaderboard");
+  const board = await call("GET", "/api/cymbal/leaderboard");
   assert.equal(board.status, 200, board.text);
   const row = board.json.posts.find((p) => p.id === post.id);
   assert.deepEqual([row.reacts, row.kinds[kind.id]], [1, 1]);
-  assert.equal((await call("GET", "/api/cymbal/owner/leaderboard", { token: U.member.token })).status, 403);
+  assert.ok(!board.text.includes("author_key") && !board.text.includes("ip_hash"));
 
   assert.equal((await call("DELETE", "/api/cymbal/owner/sticker-kinds/" + kind.id, { token: U.member.token })).status, 403);
   assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + kind.id)).status, 200);
   assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + kind.id)).status, 404);
   const after = (await call("GET", "/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
   assert.deepEqual(after.stickers, []);
+});
+
+test("profile pictures: any browser sets its own, and its posts show it", async () => {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const upload = async (who, bytes, type) => {
+    const fd = new FormData();
+    fd.append("image", new Blob([bytes], { type }), "me.png");
+    const headers = { "CF-Connecting-IP": U[who].ip };
+    if (U[who].key) headers["X-Cymbal-Key"] = U[who].key;
+    const res = await fetch(BASE + "/api/cymbal/me/profile", { method: "POST", headers, body: fd });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  assert.equal((await upload("nokey", png, "image/png")).status, 400, "a browser key is needed");
+  assert.equal((await upload("ann", Buffer.from("nope"), "text/plain")).status, 400);
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, "");
+  const set = await upload("ann", png, "image/png");
+  assert.equal(set.status, 200, JSON.stringify(set.json));
+  assert.match(set.json.pic, /^\/api\/files\/profiles\/[a-z0-9]{15}\//);
+  assert.equal((await fetch(BASE + set.json.pic)).status, 200);
+  assert.equal((await upload("ann", png, "image/png")).status, 429, "not again straight away");
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, set.json.pic);
+  assert.equal((await as("ben").get("/api/cymbal/me/profile")).json.pic, "", "another browser has its own");
+
+  const feed = (await call("GET", "/api/cymbal/feed")).json.posts;
+  const anns = feed.filter((p) => p.poster === "Ann");
+  assert.ok(anns.length && anns.every((p) => p.pic === set.json.pic), "Ann's posts show her picture");
+  assert.ok(feed.filter((p) => p.poster === "Ben").every((p) => p.pic === ""));
+
+  assert.equal((await as("ann").del("/api/cymbal/me/profile")).status, 200);
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, "");
+  for (const token of [U.member.token, U.owner.token, ""]) {
+    assert.equal((await call("GET", "/api/collections/profiles/records", { token })).status, 403);
+  }
 });
 
 test("clear the stage before providers connect", async () => {

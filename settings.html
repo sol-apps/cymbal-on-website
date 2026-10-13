@@ -1,73 +1,13 @@
 <!doctype html>
-<html lang="en-GB" data-theme="light">
+<html lang="en-GB">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://js-cdn.music.apple.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.apple.com; frame-src https://*.apple.com https://open.spotify.com https://www.youtube-nocookie.com https://bandcamp.com; form-action 'self'; base-uri 'none'; object-src 'none'">
-  <meta name="referrer" content="strict-origin-when-cross-origin">
-  <title>Settings — Cymbal on Website</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'">
+  <meta http-equiv="refresh" content="0; url=misc.html">
   <meta name="robots" content="noindex">
-  <meta name="theme-color" content="#FFB84D">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='44' rx='44' ry='12' fill='%23D56062'/%3E%3Crect x='47' y='44' width='6' height='50' fill='%232b2b29'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="app.css">
-  <script src="theme.js"></script>
-  <script src="vendor/pocketbase.umd.js"></script>
-  <script src="pb-auth.js"></script>
-  <script src="features.js"></script>
-  <script src="app.js" defer></script>
+  <title>Misc — Cymbal on Website</title>
 </head>
-<body data-page="settings">
-  <a class="skip" href="#main">Skip to the settings</a>
-
-  <header class="top">
-    <div class="wrap top-inner">
-      <h1 class="brand"><a href="./"><span class="brand-mark" aria-hidden="true"></span>CYMBAL <span class="brand-sub">SETTINGS</span></a></h1>
-      <div class="top-actions">
-        <button id="theme" class="btn btn-small" type="button">DARK</button>
-        <div class="account">
-          <button id="account" class="btn btn-small account-btn" type="button" aria-expanded="false" aria-label="Sign in">
-            <span id="account-avatar" class="avatar account-avatar" aria-hidden="true"></span>
-            <span id="account-label" class="account-label" aria-hidden="true">SIGN IN</span>
-          </button>
-          <div id="account-menu" class="panel account-menu" hidden>
-            <a class="btn btn-small" href="./">FEED</a>
-            <button id="signout" class="btn btn-small" type="button">SIGN OUT</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <main id="main" class="wrap settings">
-    <section id="settings-locked" class="panel doc">
-      <h2>SETTINGS</h2>
-      <p>Settings are for Cymbal's owner. Sign in with the button at the top.</p>
-      <p><a href="./">Back to the feed</a></p>
-    </section>
-
-    <form id="owner-login" class="panel owner-login" hidden novalidate>
-      <label for="owner-email" class="label">OWNER EMAIL</label>
-      <input id="owner-email" name="email" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" required>
-      <label for="owner-password" class="label">PASSWORD</label>
-      <input id="owner-password" name="password" type="password" autocomplete="current-password" required>
-      <div class="row">
-        <button id="owner-login-cancel" class="btn btn-small btn-quiet" type="button">CANCEL</button>
-        <button id="owner-login-go" class="btn btn-small" type="submit">SIGN IN</button>
-      </div>
-      <p id="owner-login-status" class="status" role="status" aria-live="polite"></p>
-    </form>
-
-    <section id="owner" class="panel owner" hidden aria-labelledby="owner-title"></section>
-    <section id="leaderboard" class="panel leaderboard" hidden></section>
-    <section id="sticker-admin" class="panel sticker-admin" hidden></section>
-  </main>
-
-  <footer class="foot wrap">
-    <a href="./">Back to Cymbal</a>
-    <a href="playlists.html">Playlists</a>
-  </footer>
+<body>
+  <p>Settings moved to <a href="misc.html">Misc</a>.</p>
 </body>
 </html>

@@ -61,6 +61,24 @@ routerAdd("GET", "/api/cymbal/sticker-kinds", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").kinds(e.app));
 });
 
+// The posts with the most reacts, for the Misc page. Public, like the feed it's drawn from.
+routerAdd("GET", "/api/cymbal/leaderboard", (e) => {
+  return e.json(200, require(__hooks + "/lib/stickers.js").leaderboard(e.app));
+});
+
+// This browser's picture. The browser key (X-Cymbal-Key) says whose it is.
+routerAdd("GET", "/api/cymbal/me/profile", (e) => {
+  return e.json(200, require(__hooks + "/lib/profiles.js").get(e.app, e));
+});
+
+routerAdd("POST", "/api/cymbal/me/profile", (e) => {
+  return e.json(200, require(__hooks + "/lib/profiles.js").set(e.app, e));
+});
+
+routerAdd("DELETE", "/api/cymbal/me/profile", (e) => {
+  return e.json(200, require(__hooks + "/lib/profiles.js").clear(e.app, e));
+});
+
 routerAdd("GET", "/api/cymbal/playlists", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.playlists(e.app));
@@ -184,11 +202,6 @@ routerAdd("POST", "/api/cymbal/owner/sticker-kinds", (e) => {
 routerAdd("DELETE", "/api/cymbal/owner/sticker-kinds/{id}", (e) => {
   require(__hooks + "/lib/util.js").requireOwner(e);
   return e.json(200, require(__hooks + "/lib/stickers.js").removeKind(e.app, e.request.pathValue("id")));
-}, $apis.requireAuth("users"));
-
-routerAdd("GET", "/api/cymbal/owner/leaderboard", (e) => {
-  require(__hooks + "/lib/util.js").requireOwner(e);
-  return e.json(200, require(__hooks + "/lib/stickers.js").leaderboard(e.app));
 }, $apis.requireAuth("users"));
 
 // ── the worker ──────────────────────────────────────────────────────────────

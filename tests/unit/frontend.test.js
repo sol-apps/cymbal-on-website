@@ -17,7 +17,7 @@ test("the page never turns data into markup", () => {
 });
 
 test("every page has a CSP and no inline script", () => {
-  for (const f of ["index.html", "playlists.html", "settings.html"]) {
+  for (const f of ["index.html", "playlists.html", "misc.html", "settings.html"]) {
     const html = read(f);
     assert.match(html, /http-equiv="Content-Security-Policy"/, f);
     assert.doesNotMatch(html, /script-src[^"]*unsafe-inline/, f);

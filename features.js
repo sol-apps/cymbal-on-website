@@ -11,10 +11,15 @@
 const FEATURES = {
   stickerMotion: "owner",   // stickers slap down, lift when picked up, wiggle on hover
   smallStickers: "owner",   // stickers 20% smaller
-  stickerButton: "owner",   // a STICKER button on each post, next to + COMMENT
+  stickerButton: "owner",   // a button on each post, showing the newest stickers, next to + COMMENT
   plusComment: "owner",     // a smaller "+ COMMENT" button
   openComments: "owner",    // comments shown on every post, folded after three
-  settingsPage: "owner",    // owner panel moves to settings.html
+  miscPage: "owner",        // misc.html: your picture, playlists, theme, most reacts (and the
+                            // owner panel); a MISC button replaces DARK and the playlist row
   listenCount: "owner",     // how many browsers played each post
-  accountAvatars: "owner",  // letter avatars only on posts made from an account
+  accountAvatars: "owner",  // no empty avatar: a picture, a letter for an account, or nothing
+  profilePics: "owner",     // anyone can set a picture (on misc.html); their posts show it
+  compactTop: "owner",      // a shorter top bar and composer on phones
+  compactCards: "owner",    // tighter posts: remove at the top right, no source label or
+                            // playlist chips, smaller caption and title, flatter buttons
 };

@@ -43,11 +43,16 @@ site before anyone else sees them. `features.js` lists each one as `"owner"`, `"
 `"off"`; changing a word there is how a feature goes out to everyone. Anything a feature
 changes on the server is still checked there, whatever that file says.
 
-Owner-only for now: sticker animation, smaller stickers, a STICKER button on each post,
-a smaller + COMMENT button, comments shown on every post (folded after three), listen
-counts, letter avatars only on posts made from an account, and the settings page
-(`settings.html`: the owner panel, the posts with the most reacts, and uploading PNGs
-as new stickers).
+Owner-only for now: sticker animation, smaller stickers, a sticker button on each post
+(showing the newest stickers), a smaller + COMMENT button, comments shown on every post
+(folded after three), listen counts, tighter posts and top bar on phones (remove at the
+top right, no source label or playlist chips), no empty avatars, profile pictures, and
+the Misc page.
+
+`misc.html` is for everyone: a picture and name for this browser, the playlists, the
+light/dark switch and the posts with the most reacts. Signed in as the owner it also has
+the owner panel and sticker uploads. A picture belongs to the browser that set it, like
+a post does, and shows on that browser's posts.
 
 Listens are counted for everyone even while only the owner sees the numbers: clicking
 into a post's player, or opening its song link, counts once per browser per post.
