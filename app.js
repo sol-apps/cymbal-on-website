@@ -416,7 +416,11 @@
         compact ? null : remove),
       h("div", { class: "comments", id: "c-" + p.id, hidden: true }),
       p.stickers && p.stickers.length ? stickerLayer(p) : null);
-    if (merged) card.querySelector(".comment-btn").after(stickerTray(card, p.id));
+    if (merged) {
+      const tray = stickerTray(card, p.id);
+      tray.append(h("a", { class: "sticker-add", href: "misc.html#sticker-admin", title: "Submit your own sticker", "aria-label": "Submit your own sticker" }));
+      card.querySelector(".comment-btn").after(tray);
+    }
     if (on("openComments")) fillThread(card, p);
     return card;
   }
@@ -1778,6 +1782,8 @@
       h("label", { class: "visually-hidden", for: "sticker-label" }, "Sticker name"), label,
       h("label", { class: "label", for: "sticker-file" }, "PNG ", h("span", { class: "label-note" }, "up to 1 MB; a transparent background works best")), file,
       h("div", { class: "row" }, go), status);
+    // Arriving from a post's +, go straight to the form the first time it's drawn.
+    const arrived = location.hash === "#sticker-admin" && !box.children.length;
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const f = file.files && file.files[0];
@@ -1811,6 +1817,10 @@
         } catch (err) { say("sticker-status", err.message, "error"); }
       } }, "remove") : null))) : null;
     box.replaceChildren(...[h("h2", { class: "label" }, "SUBMIT YOUR OWN STICKER"), form, list].filter(Boolean));
+    if (arrived) {
+      box.scrollIntoView({ block: "start" });
+      if (!matchMedia("(pointer: coarse)").matches) label.focus({ preventScroll: true });
+    }
   }
 
   // ── boot ──────────────────────────────────────────────────────────────────
@@ -1863,7 +1873,15 @@
       $("owner").replaceChildren();
       stopApple();
     }
-    if (miscHere) { loadProfile(); loadStickerAdmin(); }
+    if (miscHere) {
+      loadProfile();
+      loadStickerAdmin();
+      // The + beside a post's stickers lands here; submitting one needs an account.
+      if (location.hash === "#sticker-admin" && !memberNow && $("owner-login").hidden) {
+        $("account").click();
+        say("owner-login-status", "Sign in or make an account to submit a sticker.");
+      }
+    }
     // Remove buttons, stickers and features depend on who is looking, so redraw when
     // that changes.
     const who = owner ? "owner" : user ? "user:" + user.id : "";

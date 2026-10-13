@@ -72,7 +72,7 @@ a { color: inherit; text-underline-offset: 3px; }
 /* No grey flash on tap (iOS), and the round buttons and stickers never start a text
  * selection or a double-tap zoom when tapped quickly. */
 html { -webkit-tap-highlight-color: transparent; }
-.comment-btn, .sticker-tray, .pill-send {
+.comment-btn, .sticker-tray, .sticker-add, .pill-send {
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
 }
 
@@ -681,6 +681,7 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .ff-compactTop .account-btn .account-avatar { width: 30px; height: 30px; font-size: 11px; margin: 0; }
 .ff-compactTop .account-btn { padding: 3px; }
 .ff-compactTop .account-label { display: none; }
+.ff-compactTop #misc-link { margin-right: -10px; }
 @media (max-width: 559px) {
   .ff-compactTop .top-inner { min-height: 42px; }
   .ff-compactTop .brand { gap: 7px; }
@@ -728,31 +729,42 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .pill-send[disabled] { opacity: .5; }
 .pill-form .status:empty { display: none; }
 
-/* Signed in, each post's actions are a small comment icon with the stickers in a row
- * beside it, all the same size and on one line. The bubble fills in while its box is
- * open. Drawn as a mask, so it takes the text colour in either theme. */
+/* Signed in, each post's actions are a chunky speech bubble with the posts' own hard
+ * shadow, the stickers beside it, and a + at the end for submitting your own sticker,
+ * all the same size on one line. The bubble turns red while its box is open. The
+ * pictures carry their colours, so dark mode has its own (an orange fill, so the bubble
+ * still reads on the dark panel). */
+.comment-btn, .sticker-add {
+  --bubble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%232b2b29' transform='translate%282 2%29'/%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23fff2d6' stroke='%232b2b29' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --bubble-open: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%232b2b29' transform='translate%282 2%29'/%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23D56062' stroke='%232b2b29' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --add: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M6 4h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%232b2b29' transform='translate%282 2%29'/%3E%3Cpath d='M6 4h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23fff2d6' stroke='%232b2b29' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M12 9v8M8 13h8' stroke='%232b2b29' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+[data-theme="dark"] .comment-btn, [data-theme="dark"] .sticker-add {
+  --bubble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%231b1b1a' transform='translate%282 2%29'/%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23FFB84D' stroke='%231b1b1a' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --bubble-open: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%231b1b1a' transform='translate%282 2%29'/%3E%3Cpath d='M5 4h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8.5L6 21.5V18H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23ff9aa0' stroke='%231b1b1a' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --add: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 25'%3E%3Cpath d='M6 4h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%231b1b1a' transform='translate%282 2%29'/%3E%3Cpath d='M6 4h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z' fill='%23FFB84D' stroke='%231b1b1a' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M12 9v8M8 13h8' stroke='%231b1b1a' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+}
 .comment-btn {
-  --bubble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linejoin='round'%3E%3Cpath d='M12 3.2a8.8 8.8 0 0 0-7.6 13.2L3.3 20.7l4.4-1.1A8.8 8.8 0 1 0 12 3.2z'/%3E%3C/svg%3E");
-  width: 29px; height: 29px; padding: 0; margin-left: -3px; border: 0; background: transparent;
-  color: var(--ink); cursor: pointer; display: grid; place-items: center;
+  width: 29px; height: 29px; padding: 0; margin-left: -2px; border: 0; background: transparent;
+  cursor: pointer; display: grid; place-items: center;
 }
 .comment-btn::before {
-  content: ""; width: 23px; height: 23px; background: currentColor;
-  -webkit-mask: var(--bubble) center / contain no-repeat; mask: var(--bubble) center / contain no-repeat;
+  content: ""; width: 23px; height: 23px; background: var(--bubble) center / contain no-repeat;
   transition: scale .15s ease-out;
 }
-.comment-btn:active::before { scale: .9; }
-.comment-btn[aria-expanded="true"] {
-  --bubble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' stroke='black' stroke-width='1.9' stroke-linejoin='round'%3E%3Cpath d='M12 3.2a8.8 8.8 0 0 0-7.6 13.2L3.3 20.7l4.4-1.1A8.8 8.8 0 1 0 12 3.2z'/%3E%3C/svg%3E");
-}
+.comment-btn:active::before, .sticker-add:active::before { scale: .9; }
+.comment-btn[aria-expanded="true"]::before { background-image: var(--bubble-open); }
 .comment-btn span { display: none; }
 
-/* The stickers beside it: no buttons around them, each at its own slight angle. */
-.card-actions .sticker-tray { margin: 0 0 0 -2px; gap: 4px; }
+/* The stickers beside it: no buttons around them, each at its own slight angle. The +
+ * at the end sits the same distance from the last sticker as they do from each other. */
+.card-actions .sticker-tray { margin: 0 0 0 3px; gap: 2px; }
 .card-actions .sticker-tray .sticker-pick { width: 29px; height: 29px; padding: 3px; }
 .card-actions .sticker-tray .sticker-pick:hover { background: transparent; }
 .card-actions .sticker-tray .sticker-pick img { rotate: var(--lean, 0deg); width: 23px; height: 23px; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .2)); transition: transform .15s ease-out; }
 .card-actions .sticker-tray .sticker-pick:hover img { transform: translateY(-2px) scale(1.06); }
+.sticker-add { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 6px; }
+.sticker-add::before { content: ""; width: 21px; height: 21px; background: var(--add) center / contain no-repeat; transition: scale .15s ease-out; }
 
 /* Opening: the box eases out from the icon. Transforms and opacity only, so it stays
  * smooth on a phone with players on the page. */
@@ -764,11 +776,12 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   from { opacity: 0; transform: translateY(-4px) scale(.96, .9); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .comments.is-opening .pill-form, .comment-btn::before { animation: none; transition: none; }
+  .comments.is-opening .pill-form, .comment-btn::before, .sticker-add::before { animation: none; transition: none; }
 }
 
-/* compactCards: the name, the time and the caption's words share one left edge, and
- * the bubble's point sits under the start of the name (or the middle of the picture). */
-.ff-compactCards .card-head > .who:first-child { padding-left: 10px; }
+/* compactCards: the name and time sit a touch in from the card's edge (Sol's call: 5px
+ * left of the caption's words), and the bubble's point sits under the start of the name
+ * (or the middle of the picture). */
+.ff-compactCards .card-head > .who:first-child { padding-left: 5px; }
 .ff-compactCards .caption { margin-top: 2px; }
 .ff-compactCards .caption::before { left: 9px; }
