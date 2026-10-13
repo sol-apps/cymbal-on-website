@@ -78,7 +78,7 @@ function postView(rec, syncs, keyHash, owner) {
     // Posted while signed in. Says only that an account wrote it, never which one.
     account: !!rec.getString("author"),
     mine: mine,
-    can_delete: mine || owner,
+    can_delete: owner,
     created: rec.getString("created"),
     comment_count: rec.getInt("comment_count"),
     listen_count: rec.getInt("listen_count"),
@@ -93,7 +93,7 @@ function views(app, rows, e) {
   const owner = u.isOwner(e);
   const keyHash = u.writerKey(e, false);
   const syncs = syncsByPost(app, rows.map((r) => r.id));
-  const stickers = require(__hooks + "/lib/stickers.js").byPost(app, rows.map((r) => r.id), owner);
+  const stickers = require(__hooks + "/lib/stickers.js").byPost(app, rows.map((r) => r.id), e);
   const comments = commentPreviews(app, rows, keyHash, owner);
   const pics = require(__hooks + "/lib/profiles.js").picsByKey(app, rows.map((r) => r.getString("author_key")));
   return rows.map((r) => {
@@ -195,7 +195,7 @@ function createPost(app, e) {
       const now = u.pbTime(Date.now());
       const post = new Record(tx.findCollectionByNameOrId("posts"));
       post.set("pseudonym", name);
-      if (u.isOwner(e)) post.set("author", e.auth.id);
+      if (e.auth && e.auth.collection().name === "users") post.set("author", e.auth.id);
       post.set("author_key", keyHash);
       post.set("ip_hash", ip);
       post.set("source_provider", parsed.provider);
@@ -250,22 +250,20 @@ function createPost(app, e) {
   return { replayed: false, post: postById(app, e, postId) };
 }
 
-// DELETE /api/cymbal/posts/{id} — the browser that wrote it, or the owner.
+// DELETE /api/cymbal/posts/{id} — the owner only.
 function deletePost(app, e, id) {
   const u = util();
   if (!/^[a-z0-9]{15}$/.test(String(id || ""))) throw new NotFoundError("No such post.");
   const post = u.findOne(app, "posts", "id = {:id}", { id: id });
   if (!post) throw new NotFoundError("No such post.");
-  const keyHash = u.writerKey(e, false);
-  const byAuthor = !!keyHash && post.getString("author_key") === keyHash;
-  if (!byAuthor && !u.isOwner(e)) throw new ForbiddenError("You can only remove your own posts.");
+  if (!u.isOwner(e)) throw new ForbiddenError("Only the owner can remove posts.");
   if (post.getBool("deleted")) return { ok: true };
 
   app.runInTransaction((tx) => {
     const p = tx.findRecordById("posts", id);
     if (p.getBool("deleted")) return;
     p.set("deleted", true);
-    p.set("deleted_by", byAuthor ? "author" : "admin");
+    p.set("deleted_by", "admin");
     p.set("deleted_at", u.pbTime(Date.now()));
     p.set("caption", "");
     tx.save(p);
@@ -289,7 +287,7 @@ function commentView(rec, keyHash, owner) {
     body: rec.getString("body"),
     poster: rec.getString("pseudonym") || "someone",
     mine: mine,
-    can_delete: mine || owner,
+    can_delete: owner,
     created: rec.getString("created"),
   };
 }
@@ -351,21 +349,19 @@ function createComment(app, e, postId) {
   return { replayed: false, comment: commentView(app.findRecordById("comments", id), keyHash, owner) };
 }
 
-// DELETE /api/cymbal/comments/{id}
+// DELETE /api/cymbal/comments/{id} — the owner only.
 function deleteComment(app, e, id) {
   const u = util();
   if (!/^[a-z0-9]{15}$/.test(String(id || ""))) throw new NotFoundError("No such comment.");
   const c = u.findOne(app, "comments", "id = {:id}", { id: id });
   if (!c) throw new NotFoundError("No such comment.");
-  const keyHash = u.writerKey(e, false);
-  const byAuthor = !!keyHash && c.getString("author_key") === keyHash;
-  if (!byAuthor && !u.isOwner(e)) throw new ForbiddenError("You can only remove your own comments.");
+  if (!u.isOwner(e)) throw new ForbiddenError("Only the owner can remove comments.");
   if (c.getBool("deleted")) return { ok: true };
   app.runInTransaction((tx) => {
     const r = tx.findRecordById("comments", id);
     if (r.getBool("deleted")) return;
     r.set("deleted", true);
-    r.set("deleted_by", byAuthor ? "author" : "admin");
+    r.set("deleted_by", "admin");
     r.set("deleted_at", u.pbTime(Date.now()));
     r.set("body", "");
     tx.save(r);

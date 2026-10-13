@@ -9,11 +9,13 @@
  * Who reaches what:
  *   - the feed, posts, comments and playlist links are open: anyone with the link
  *     reads, and posts under a typed name. A browser's private key (X-Cymbal-Key)
- *     is what lets it remove its own posts; rate limits are per key and per network.
- *   - /api/cymbal/owner/* requires a signed-in `users` record with role "admin".
- *     Only the owner signs in (PocketBase email + password), and only for this
- *     panel; role is set by a superuser in the dashboard and no request can set
- *     it (see pb_migrations/1790467200_owner_password_auth.js).
+ *     says which posts are its own; rate limits are per key and per network.
+ *   - anyone can make an account (POST /api/cymbal/signup) and sign in with email
+ *     and password. Signed-in people place stickers (requireAuth("users")).
+ *   - /api/cymbal/owner/* requires a signed-in `users` record with role "admin":
+ *     the owner. Removing posts and comments is the owner's alone too. Role is set
+ *     by a superuser in the dashboard; sign-up always makes "user" and no request
+ *     can change it (see pb_migrations/1791700000_member_accounts.js).
  *   - /api/cymbal/oauth/{provider}/callback is authenticated by a single-use state
  *     bound to the owner (lib/owner.js).
  *   - the collections themselves are superuser-only (every API rule null), so none
@@ -79,10 +81,30 @@ routerAdd("DELETE", "/api/cymbal/me/profile", (e) => {
   return e.json(200, require(__hooks + "/lib/profiles.js").clear(e.app, e));
 });
 
+routerAdd("POST", "/api/cymbal/signup", (e) => {
+  const rec = require(__hooks + "/lib/accounts.js").signup(e.app, e);
+  return $apis.recordAuthResponse(e, rec, "password", null);
+});
+
 routerAdd("GET", "/api/cymbal/playlists", (e) => {
   const feed = require(__hooks + "/lib/feed.js");
   return e.json(200, feed.playlists(e.app));
 });
+
+// ── anyone signed in ────────────────────────────────────────────────────────
+// Stickers: one each per post, and only your own can be moved or taken back.
+
+routerAdd("POST", "/api/cymbal/posts/{id}/stickers", (e) => {
+  return e.json(200, require(__hooks + "/lib/stickers.js").add(e.app, e, e.request.pathValue("id"), e.requestInfo().body || {}));
+}, $apis.requireAuth("users"));
+
+routerAdd("POST", "/api/cymbal/stickers/{id}/move", (e) => {
+  return e.json(200, require(__hooks + "/lib/stickers.js").move(e.app, e, e.request.pathValue("id"), e.requestInfo().body || {}));
+}, $apis.requireAuth("users"));
+
+routerAdd("DELETE", "/api/cymbal/stickers/{id}", (e) => {
+  return e.json(200, require(__hooks + "/lib/stickers.js").remove(e.app, e, e.request.pathValue("id")));
+}, $apis.requireAuth("users"));
 
 // ── owner ───────────────────────────────────────────────────────────────────
 
@@ -177,21 +199,6 @@ routerAdd("POST", "/api/cymbal/owner/apple/complete", (e) => {
   require(__hooks + "/lib/util.js").requireOwner(e);
   const body = e.requestInfo().body || {};
   return e.json(200, require(__hooks + "/lib/sync.js").appleComplete(e.app, body.results));
-}, $apis.requireAuth("users"));
-
-routerAdd("POST", "/api/cymbal/owner/posts/{id}/stickers", (e) => {
-  require(__hooks + "/lib/util.js").requireOwner(e);
-  return e.json(200, require(__hooks + "/lib/stickers.js").add(e.app, e.request.pathValue("id"), e.requestInfo().body || {}));
-}, $apis.requireAuth("users"));
-
-routerAdd("POST", "/api/cymbal/owner/stickers/{id}/move", (e) => {
-  require(__hooks + "/lib/util.js").requireOwner(e);
-  return e.json(200, require(__hooks + "/lib/stickers.js").move(e.app, e.request.pathValue("id"), e.requestInfo().body || {}));
-}, $apis.requireAuth("users"));
-
-routerAdd("DELETE", "/api/cymbal/owner/stickers/{id}", (e) => {
-  require(__hooks + "/lib/util.js").requireOwner(e);
-  return e.json(200, require(__hooks + "/lib/stickers.js").remove(e.app, e.request.pathValue("id")));
 }, $apis.requireAuth("users"));
 
 routerAdd("POST", "/api/cymbal/owner/sticker-kinds", (e) => {

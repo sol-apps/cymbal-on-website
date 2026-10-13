@@ -31,14 +31,16 @@
   const onFeed = PAGE === "feed";
 
   // ── features (features.js) ────────────────────────────────────────────────
-  // "owner" features are drawn only while the owner is signed in. Each one also puts
-  // an ff-<name> class on <html> so the stylesheet can follow the same switch.
+  // "members" features are drawn for anyone signed in, "owner" ones only for the
+  // owner. Each one also puts an ff-<name> class on <html> so the stylesheet can
+  // follow the same switch.
 
   let ownerNow = PBAuth.isAdmin();
+  let memberNow = PBAuth.isSignedIn();
 
   function on(name) {
     const v = (typeof FEATURES === "object" && FEATURES) ? FEATURES[name] : "off";
-    return v === "all" || (v === "owner" && ownerNow);
+    return v === "all" || (v === "members" && memberNow) || (v === "owner" && ownerNow);
   }
 
   function applyFeatures() {
@@ -405,7 +407,7 @@
           "aria-expanded": "false", "aria-controls": "c-" + p.id,
           onclick: (ev) => (on("openComments") ? toggleCommentForm : toggleComments)(ev.currentTarget.closest(".card"), p.id),
         }, commentLabel(count)),
-        on("stickerButton") && ownerNow ? stickButton() : null,
+        on("stickerButton") && memberNow ? stickButton() : null,
         compact ? null : remove),
       h("div", { class: "comments", id: "c-" + p.id, hidden: true }),
       p.stickers && p.stickers.length ? stickerLayer(p) : null);
@@ -877,7 +879,7 @@
       if (!card) {
         if (!from) return;
         from.el.remove();
-        await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
+        await api("/api/cymbal/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
         return;
       }
       const r = card.getBoundingClientRect();
@@ -891,7 +893,7 @@
       if (from && from.postId === postId) {
         pinSticker(from.el, spot);
         from.el.hidden = false;
-        await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id) + "/move", { method: "POST", body: spot });
+        await api("/api/cymbal/stickers/" + encodeURIComponent(from.id) + "/move", { method: "POST", body: spot });
         return;
       }
       const layer = layerOf(card);
@@ -903,10 +905,10 @@
       layer.append(el);
       if (from) {
         from.el.remove();
-        await api("/api/cymbal/owner/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
+        await api("/api/cymbal/stickers/" + encodeURIComponent(from.id), { method: "DELETE" });
       }
       try {
-        const res = await api("/api/cymbal/owner/posts/" + encodeURIComponent(postId) + "/stickers", { method: "POST", body: spot });
+        const res = await api("/api/cymbal/posts/" + encodeURIComponent(postId) + "/stickers", { method: "POST", body: spot });
         el.dataset.id = res.sticker.id;
         replaced.forEach((old) => old.remove());
       } catch (err) {
@@ -948,13 +950,32 @@
     }
   }
 
-  // ── the owner ─────────────────────────────────────────────────────────────
+  // ── signing in ────────────────────────────────────────────────────────────
+  // One form for both: signing in to an account, or making one (with a name).
+
+  let signingUp = false;
+
+  function loginMode(up) {
+    signingUp = up;
+    $("owner-login-title").textContent = up ? "MAKE AN ACCOUNT" : "SIGN IN";
+    $("owner-name").hidden = !up;
+    document.querySelector('label[for="owner-name"]').hidden = !up;
+    $("owner-password").autocomplete = up ? "new-password" : "current-password";
+    $("owner-login-go").textContent = up ? "MAKE ACCOUNT" : "SIGN IN";
+    $("owner-login-mode").textContent = up ? "Have an account? Sign in" : "New here? Make an account";
+    say("owner-login-status", "");
+  }
 
   function closeLogin() {
     $("owner-login").hidden = true;
     $("owner-password").value = "";
-    say("owner-login-status", "");
+    loginMode(false);
   }
+
+  $("owner-login-mode").addEventListener("click", () => {
+    loginMode(!signingUp);
+    (signingUp ? $("owner-name") : $("owner-email")).focus();
+  });
 
   // The top bar's account button: signed out it opens the sign-in form, signed in it
   // opens a small menu with SIGN OUT. On phones it's just the circle; wider screens
@@ -965,7 +986,7 @@
   }
 
   function showAccount(user) {
-    const name = user ? (user.name || String(user.email || "").split("@")[0] || "Owner") : "";
+    const name = user ? (user.name || String(user.email || "").split("@")[0] || "You") : "";
     const old = $("account-avatar");
     const circle = user ? avatar(name) : h("span", {}, "");
     circle.id = "account-avatar";
@@ -1006,17 +1027,23 @@
     ev.preventDefault();
     const email = $("owner-email").value.trim();
     const password = $("owner-password").value;
-    if (!email || !password) return say("owner-login-status", "Enter the owner email and password.", "error");
+    const name = $("owner-name").value.trim();
+    if (signingUp && name.length < 2) return say("owner-login-status", "Pick a name of at least 2 characters.", "error");
+    if (!email || !password) return say("owner-login-status", "Enter your email and password.", "error");
+    if (signingUp && password.length < 8) return say("owner-login-status", "Use a password of at least 8 characters.", "error");
     const btn = $("owner-login-go");
     btn.disabled = true;
-    say("owner-login-status", "Signing in…");
+    say("owner-login-status", signingUp ? "Making your account…" : "Signing in…");
     try {
-      await PBAuth.signIn(email, password);
+      if (signingUp) await PBAuth.signUp(email, password, name);
+      else await PBAuth.signIn(email, password);
       closeLogin();
     } catch (err) {
       const status = err && err.status;
+      const msg = err && err.response && err.response.message;
       say("owner-login-status", status === 0 ? "Couldn't reach Cymbal. Check your connection."
-        : status === 429 ? "Too many attempts. Wait a minute and try again."
+        : status === 429 ? (signingUp && msg ? msg : "Too many attempts. Wait a minute and try again.")
+        : signingUp ? (msg || "That account couldn't be made.")
         : "That email and password didn't match.", "error");
     } finally {
       btn.disabled = false;
@@ -1732,15 +1759,19 @@
   if (done || failed) history.replaceState(null, "", location.pathname);
 
   // onChange calls back immediately with the current session, then on every change.
-  // Only the owner ever signs in; anyone else's session is simply ignored.
-  let ownerState = null;
+  // Anyone can sign in: that turns on the "members" features and stickers. The owner
+  // panel and sticker uploads are the owner's alone.
+  let whoState = null;
   PBAuth.onChange((user) => {
     const owner = !!user && user.role === "admin";
     ownerNow = owner;
+    memberNow = !!user;
     applyFeatures();
     showAccount(user);
     if (user) closeLogin();
-    showStickerDock(onFeed && owner && !on("stickerButton"));
+    // A new account's name becomes the name it posts under, unless one is remembered.
+    if (user && onFeed && !savedName() && user.name) { rememberName(user.name); $("name").value = user.name; showName(false); }
+    showStickerDock(onFeed && !!user && !on("stickerButton"));
     const miscHere = PAGE === "misc";
     if (owner) {
       // With the misc page on, the owner panel lives there; Apple Music still
@@ -1753,10 +1784,11 @@
       $("owner").replaceChildren();
       if ($("sticker-admin")) { $("sticker-admin").hidden = true; $("sticker-admin").replaceChildren(); }
       stopApple();
-      if (user) say(miscHere ? "owner-login-status" : "composer-status", "That account isn't Cymbal's owner.", "error");
     }
-    // Remove buttons and owner features depend on who is looking, so redraw when that changes.
-    if (onFeed && ownerState !== null && ownerState !== owner) loadFeed(true);
-    ownerState = owner;
+    // Remove buttons, stickers and features depend on who is looking, so redraw when
+    // that changes.
+    const who = owner ? "owner" : user ? "user:" + user.id : "";
+    if (onFeed && whoState !== null && whoState !== who) loadFeed(true);
+    whoState = who;
   });
 })();
