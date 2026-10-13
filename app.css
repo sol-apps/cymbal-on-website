@@ -483,22 +483,25 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .ff-smallStickers .sticker { width: 51px; }
 .ff-smallStickers .sticker-carry { width: 58px; }
 
-/* stickerMotion: slapped down, lifted when picked up, a wiggle under the pointer. */
-.ff-stickerMotion .sticker-placed.is-new { animation: sticker-slap .45s cubic-bezier(.2, .9, .3, 1.3); }
-.ff-stickerMotion .sticker-carry { scale: 1.12; animation: sticker-lift .18s ease-out; }
-.ff-stickerMotion .sticker-placed.is-mine:hover { animation: sticker-wiggle .5s ease-in-out; }
-.ff-stickerMotion .sticker-pick:hover img { animation: sticker-wiggle .5s ease-in-out; }
-@keyframes sticker-slap {
-  0% { scale: 1.7; opacity: 0; filter: drop-shadow(10px 14px 6px rgba(0, 0, 0, .25)); }
-  55% { scale: .9; opacity: 1; }
-  78% { scale: 1.06; }
-  100% { scale: 1; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .25)); }
+/* stickerMotion, after iMessage stickers: picked up, a sticker lifts a little off the
+ * page with a soft shadow under it; let go, it presses down onto the post and settles,
+ * with the shadow tightening as it lands. No bounce, no wiggle. */
+.ff-stickerMotion .sticker-carry {
+  scale: 1.08;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .22));
+  animation: sticker-lift .16s ease-out;
 }
-@keyframes sticker-lift { from { scale: 1; } to { scale: 1.12; } }
-@keyframes sticker-wiggle {
-  0%, 100% { rotate: 0deg; }
-  25% { rotate: -7deg; }
-  75% { rotate: 7deg; }
+.ff-stickerMotion .sticker-placed.is-new { animation: sticker-press .28s cubic-bezier(.3, .7, .4, 1); }
+.ff-stickerMotion .sticker-placed.is-mine { transition: scale .15s ease-out; }
+.ff-stickerMotion .sticker-placed.is-mine:hover { scale: 1.03; }
+@keyframes sticker-lift {
+  from { scale: 1; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .2)); }
+  to { scale: 1.08; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .22)); }
+}
+@keyframes sticker-press {
+  0% { scale: 1.08; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .22)); }
+  60% { scale: .97; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .25)); }
+  100% { scale: 1; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .25)); }
 }
 
 /* plusComment, stickerButton: the card's small buttons. */
@@ -561,6 +564,7 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .ff-compactCards .song { gap: 0; }
 .ff-compactCards .track { font-size: 15px; line-height: 1.25; }
 .ff-compactCards .artist { font-size: 12px; }
+.artist-inline { font-weight: 500; color: var(--muted); }
 .ff-compactCards .card-actions { gap: 6px; }
 .ff-compactCards .card .btn-small {
   min-height: 30px; padding: 4px 9px; font-size: 8px;

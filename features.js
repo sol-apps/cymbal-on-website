@@ -9,7 +9,7 @@
  * only decides what the page draws.
  */
 const FEATURES = {
-  stickerMotion: "owner",   // stickers slap down, lift when picked up, wiggle on hover
+  stickerMotion: "owner",   // stickers lift a little when picked up and press down when stuck
   smallStickers: "owner",   // stickers 20% smaller
   stickerButton: "owner",   // a button on each post, showing the newest stickers, next to + COMMENT
   plusComment: "owner",     // a smaller "+ COMMENT" button

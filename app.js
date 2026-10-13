@@ -389,9 +389,14 @@
             h("span", null, p.listen_count === 1 ? " listen" : " listens")) : null)),
         compact ? remove : h("span", { class: "src src-" + (p.source || "x") }, (p.source_label || "").toUpperCase())),
       p.caption ? h("p", { class: "caption" }, p.caption) : null,
-      h("div", { class: "song" },
-        h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title)),
-        p.artist ? h("p", { class: "artist" }, p.artist) : null),
+      compact
+        // One line: "Title - Artist", the artist quieter.
+        ? h("div", { class: "song" },
+          h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title),
+            p.artist ? h("span", { class: "artist-inline" }, " - " + p.artist) : null))
+        : h("div", { class: "song" },
+          h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title)),
+          p.artist ? h("p", { class: "artist" }, p.artist) : null),
       player(p),
       compact ? null : syncChips(p),
       h("div", { class: "card-actions" },
