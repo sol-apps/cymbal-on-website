@@ -407,11 +407,12 @@
       compact ? null : syncChips(p),
       h("div", { class: "card-actions" },
         h("button", {
-          class: "btn btn-small js-toggle" + (on("plusComment") ? " btn-tiny" : "") + (merged ? " stick-btn" : ""), type: "button",
+          class: merged ? "plus-btn js-toggle stick-btn" : "btn btn-small js-toggle" + (on("plusComment") ? " btn-tiny" : ""), type: "button",
           "aria-expanded": "false", "aria-controls": "c-" + p.id,
           "aria-label": merged ? "Comment or stick a sticker on this post" : null,
+          title: merged ? "Comment or stick a sticker" : null,
           onclick: (ev) => (on("openComments") ? toggleCommentForm : toggleComments)(ev.currentTarget.closest(".card"), p.id),
-        }, merged ? stickStack() : null, h("span", { class: "js-count-label" }, commentLabel(count))),
+        }, h("span", { class: "js-count-label", "aria-hidden": merged ? "true" : null }, merged ? "+" : commentLabel(count))),
         compact ? null : remove),
       h("div", { class: "comments", id: "c-" + p.id, hidden: true }),
       p.stickers && p.stickers.length ? stickerLayer(p) : null);
@@ -520,7 +521,8 @@
   function bumpCount(card, delta) {
     const n = Math.max(0, Number(card.dataset.count || 0) + delta);
     card.dataset.count = n;
-    card.querySelector(".js-count-label").textContent = commentLabel(n);
+    const label = card.querySelector(".js-count-label");
+    if (!card.querySelector(".plus-btn")) label.textContent = commentLabel(n);
     if (on("openComments")) foldButton(card);
   }
 
@@ -592,11 +594,15 @@
       box.prepend(list);
     }
     const form = commentForm(postId, list, card);
-    // Signed in, the stickers are right there above the box: no separate button.
+    // Signed in, the stickers float right there above the box: no separate button.
     if (btn.classList.contains("stick-btn")) box.append(stickerTray(card));
     box.append(form);
     box.hidden = false;
     btn.setAttribute("aria-expanded", "true");
+    // The + grows into the box: replayed each time it opens.
+    box.classList.remove("is-opening");
+    void box.offsetWidth;
+    box.classList.add("is-opening");
     // On a phone, focusing would throw the keyboard up over the stickers.
     if (!matchMedia("(pointer: coarse)").matches) form.querySelector("textarea").focus();
   }
@@ -604,19 +610,39 @@
   function commentForm(postId, list, card) {
     let rid = null;
     const id = "cf-" + postId;
-    const input = h("textarea", { id: id, rows: "2", maxlength: "1000", required: true });
-    const name = h("input", { type: "text", maxlength: "32", autocomplete: "nickname", placeholder: "Your name", "aria-label": "Your name" });
+    const pill = on("pillComments");
+    // Signed in, comments go under the account's name, so there's no name box.
+    const account = PBAuth.user();
+    const accountName = account && String(account.name || "").trim().length >= 2 ? String(account.name).trim() : "";
+    const input = h("textarea", { id: id, rows: pill ? "1" : "2", maxlength: "1000", required: true, placeholder: pill ? "Add a comment…" : null });
+    const name = h("input", { type: "text", maxlength: "32", autocomplete: "nickname", placeholder: pill ? "Name" : "Your name", "aria-label": "Your name", class: pill ? "pill-name" : null });
     name.value = savedName();
     const status = h("p", { class: "status", role: "status", "aria-live": "polite" });
-    const btn = h("button", { class: "btn btn-small btn-primary", type: "submit" }, "SEND");
+    const btn = pill
+      ? h("button", { class: "pill-send", type: "submit", "aria-label": "Send", title: "Send" }, h("span", { "aria-hidden": "true" }, "↑"))
+      : h("button", { class: "btn btn-small btn-primary", type: "submit" }, "SEND");
     input.addEventListener("input", () => { rid = null; });
-    const form = h("form", { class: "comment-form", novalidate: true },
-      h("label", { class: "visually-hidden", for: id }, "Write a comment"),
-      name, h("div", { class: "row" }, input, btn), status);
+    let form;
+    if (pill) {
+      // One line that grows with what's typed, up to a few lines.
+      const grow = () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 120) + "px"; };
+      input.addEventListener("input", grow);
+      // Enter sends; Shift+Enter is a new line.
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); form.requestSubmit(); }
+      });
+      form = h("form", { class: "comment-form pill-form", novalidate: true },
+        h("label", { class: "visually-hidden", for: id }, "Write a comment"),
+        h("div", { class: "pill-row" }, accountName ? null : name, h("div", { class: "pill" }, input, btn)), status);
+    } else {
+      form = h("form", { class: "comment-form", novalidate: true },
+        h("label", { class: "visually-hidden", for: id }, "Write a comment"),
+        name, h("div", { class: "row" }, input, btn), status);
+    }
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const body = input.value.trim();
-      const who = name.value.trim();
+      const who = accountName && pill ? accountName : name.value.trim();
       if (!body) { status.textContent = "Write something first."; input.focus(); return; }
       if (who.length < 2) { status.textContent = "Add your name."; name.focus(); return; }
       if (!rid) rid = requestId();
@@ -626,9 +652,10 @@
           method: "POST", body: { body: body, name: who, request_id: rid },
         });
         rid = null;
-        rememberName(who);
-        if (!$("name").value) $("name").value = who;
+        if (!(accountName && pill)) rememberName(who);
+        if ($("name") && !$("name").value) $("name").value = who;
         input.value = "";
+        input.style.height = "";
         status.textContent = "";
         if (!res.replayed) {
           const at = form.closest(".card") || card;
@@ -719,7 +746,7 @@
   // it had really been peeled off.
 
   function stickerTray(card) {
-    return h("div", { class: "sticker-tray", role: "group", "aria-label": "Stick a sticker on this post" },
+    const tray = h("div", { class: "sticker-tray", role: "group", "aria-label": "Stick a sticker on this post" },
       KINDS.map((k) => h("button", {
         class: "sticker-pick", type: "button", title: k.label + ": tap to stick it here, or drag it",
         onpointerdown: (ev) => {
@@ -736,6 +763,8 @@
           stickHere(card, k.id);
         },
       }, h("img", { src: stickerSrc(k.id), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, k.label))));
+    [...tray.children].forEach((b, i) => b.style.setProperty("--i", i));
+    return tray;
   }
 
   // The comment button shows the newest stickers (uploads come last in KINDS), so a
@@ -1680,7 +1709,6 @@
                 say("profile-status", "Picture removed.", "ok");
               } catch (err) { say("profile-status", err.message, "error"); }
             } }, "remove") : null))),
-      h("p", { class: "small" }, "Your picture shows on the posts you make while signed in."),
       status);
   }
 

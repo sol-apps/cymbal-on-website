@@ -660,3 +660,75 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   .ff-compactCards .card.panel { box-shadow: 2px 2px 0 var(--line); border-width: 2px; }
   .ff-compactCards .misc .panel { box-shadow: 2px 2px 0 var(--line); border-width: 2px; }
 }
+
+/* pillComments: the comment box is a message box. One rounded line that grows as you
+ * type, a small round send button inside its end, and (signed out) a small name box
+ * beside it that never grows. */
+.pill-form { gap: 6px; }
+.pill-row { display: flex; gap: 6px; align-items: flex-end; }
+.pill-form .pill-name {
+  flex: 0 0 84px; width: 84px; min-width: 0; margin: 0;
+  min-height: 40px; padding: 8px 12px; border-radius: 20px;
+  border: 1.5px solid color-mix(in srgb, var(--line) 25%, transparent);
+  background: var(--panel-2); font-size: 14px;
+}
+.pill {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; gap: 4px;
+  min-height: 40px; padding: 3px 4px 3px 14px; border-radius: 20px;
+  border: 1.5px solid color-mix(in srgb, var(--line) 25%, transparent);
+  background: var(--panel-2);
+}
+.pill:focus-within, .pill-form .pill-name:focus { border-color: var(--line); }
+.pill textarea {
+  flex: 1 1 auto; min-width: 0; margin: 0; padding: 7px 0; resize: none;
+  min-height: 0; height: 32px; max-height: 120px; line-height: 18px; font-size: 14px;
+  border: 0; background: transparent; box-shadow: none; outline: none;
+}
+.ff-compactCards .pill textarea { min-height: 0; }
+.pill-send {
+  flex: none; width: 30px; height: 30px; margin-bottom: 1px; border: 0; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer;
+  background: var(--accent-strong); color: var(--accent-ink); font: 700 16px/1 var(--read);
+  transition: transform .12s ease-out, opacity .12s;
+}
+.pill-send:active { transform: scale(.9); }
+.pill-send[disabled] { opacity: .5; }
+.pill-form .status:empty { display: none; }
+
+/* The + on each post (signed in): turns into × while its box is open. */
+.plus-btn {
+  width: 32px; height: 32px; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; cursor: pointer;
+  border: 1.5px solid color-mix(in srgb, var(--line) 30%, transparent);
+  background: var(--panel-2); color: var(--ink); font: 400 22px/1 var(--read);
+  transition: transform .25s cubic-bezier(.3, 1.4, .5, 1), background .15s;
+}
+.plus-btn:hover { background: color-mix(in srgb, var(--panel-2) 80%, var(--line)); }
+.plus-btn[aria-expanded="true"] { transform: rotate(45deg); }
+.plus-btn span { margin-top: -2px; }
+
+/* Stickers float over the box: no buttons around them. */
+.comments .sticker-tray { margin: 0 0 -2px -4px; gap: 4px; }
+.comments .sticker-tray .sticker-pick { width: 42px; height: 42px; padding: 3px; }
+.comments .sticker-tray .sticker-pick:hover { background: transparent; }
+.comments .sticker-tray .sticker-pick img { width: 34px; height: 34px; filter: drop-shadow(0 .5px .6px rgba(0, 0, 0, .2)); transition: transform .15s ease-out; }
+.comments .sticker-tray .sticker-pick:hover img { transform: translateY(-2px) scale(1.06); }
+
+/* Opening: the box grows out from the + and the stickers pop up one after another. */
+.comments.is-opening .pill-form { animation: pill-open .34s cubic-bezier(.2, .9, .25, 1.05) both; }
+.comments.is-opening .sticker-tray .sticker-pick {
+  animation: sticker-pop .36s cubic-bezier(.3, 1.5, .5, 1) both;
+  animation-delay: calc(60ms + var(--i, 0) * 35ms);
+}
+@keyframes pill-open {
+  from { clip-path: inset(0 calc(100% - 34px) 0 0 round 20px); opacity: .4; }
+  to { clip-path: inset(0 0 0 0 round 20px); opacity: 1; }
+}
+@keyframes sticker-pop {
+  from { transform: translateY(10px) scale(.4); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .comments.is-opening .pill-form, .comments.is-opening .sticker-tray .sticker-pick { animation: none; }
+  .plus-btn { transition: none; }
+}
