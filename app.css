@@ -719,6 +719,11 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   border: 0; background: transparent; box-shadow: none; outline: none;
 }
 .ff-compactCards .pill textarea { min-height: 0; }
+/* iPhone Safari zooms the whole page in when a box under 16px is focused, and stays
+ * zoomed after sending. Phones get 16px; the pill's height doesn't change. */
+@media (pointer: coarse) {
+  .pill textarea, .pill-form .pill-name { font-size: 16px; }
+}
 .pill-send {
   flex: none; width: 30px; height: 30px; margin-bottom: 1px; border: 0; border-radius: 50%;
   display: grid; place-items: center; cursor: pointer;

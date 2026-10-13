@@ -92,8 +92,18 @@ const PBAuth = (() => {
 
   // Rejects on a wrong email or password (PocketBase answers 400 without saying
   // which), so the caller can show one plain message.
+  // Sign-up stores the email in lower case and PocketBase matches it exactly, so a
+  // capital typed here (a phone's auto-capitalised first letter, say) is tried in
+  // lower case first. As typed is the fallback, for an account made in the dashboard.
   async function signIn(email, password) {
-    await client.collection('users').authWithPassword(String(email || ''), String(password || ''));
+    const typed = String(email || '').trim();
+    const lower = typed.toLowerCase();
+    try {
+      await client.collection('users').authWithPassword(lower, String(password || ''));
+    } catch (err) {
+      if (lower === typed || (err && err.status !== 400)) throw err;
+      await client.collection('users').authWithPassword(typed, String(password || ''));
+    }
     return user();
   }
 
