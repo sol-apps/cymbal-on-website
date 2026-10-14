@@ -660,6 +660,8 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .kind img { width: 40px; height: 40px; object-fit: contain; }
 .kind > span:first-of-type { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .sticker-upload { display: grid; gap: 4px; }
+.kind-waiting { margin-bottom: 14px; }
+.kind-waiting .kind-list { border-top: 0; padding-top: 0; }
 .sticker-admin .kind-list { border-top: 2px dashed var(--line); padding-top: 10px; margin: 0; }
 .sticker-upload input[type="file"] { font: inherit; font-size: 13px; margin-bottom: 6px; max-width: 100%; }
 .sticker-upload .row { display: flex; justify-content: flex-end; }
