@@ -10,24 +10,24 @@
  * the page draws.
  */
 const FEATURES = {
-  stickerMotion: "members",   // stickers lift a little when picked up and press down when stuck
-  smallStickers: "members",   // stickers 20% smaller
-  stickerButton: "members",   // a button on each post, showing the newest stickers, next to + COMMENT
-  plusComment: "members",     // a smaller "+ COMMENT" button
-  openComments: "members",    // comments shown on every post, folded after three
-  miscPage: "members",        // misc.html: your picture, playlists, theme, most reacts (and the
+  stickerMotion: "all",       // stickers lift a little when picked up and press down when stuck
+  smallStickers: "all",       // stickers 20% smaller
+  stickerButton: "all",       // a button on each post, showing the newest stickers, next to + COMMENT
+  plusComment: "all",         // a smaller "+ COMMENT" button
+  openComments: "all",        // comments shown on every post, folded after three
+  miscPage: "all",            // misc.html: your picture, playlists, theme, most reacts (and the
                               // owner panel); a MISC button replaces DARK and the playlist row
-  listenCount: "members",     // how many browsers played each post
-  accountAvatars: "members",  // no empty avatar: a picture, a letter for an account, or nothing
-  profilePics: "members",     // anyone can set a picture (on misc.html); their posts show it
-  compactTop: "members",      // a shorter top bar and composer on phones
-  compactCards: "members",    // tighter posts: remove at the top right, no source label or
+  listenCount: "all",         // how many browsers played each post
+  accountAvatars: "all",      // no empty avatar: a picture, a letter for an account, or nothing
+  profilePics: "all",         // anyone can set a picture (on misc.html); their posts show it
+  compactTop: "all",          // a shorter top bar and composer on phones
+  compactCards: "all",        // tighter posts: remove at the top right, no source label or
                               // playlist chips, smaller caption and title, flatter buttons
   pillComments: "all",        // the comment box looks like a message box: one line that grows,
                               // a small send button, and a small name box only when signed out
-  altLinks: "members",        // under each post, blue links to the song on the other services
+  altLinks: "all",            // under each post, blue links to the song on the other services
                               // (only the ones Cymbal has found); replaces the playlist chips
-  outBubble: "off",           // signed out, posts get the same comment bubble and sticker row as
+  outBubble: "all",           // signed out, posts get the same comment bubble and sticker row as
                               // signed in (needs stickerButton and openComments on for them too);
                               // tapping a sticker asks them to sign in. Only "all" reaches anyone
                               // signed out, so "members" or "owner" changes nothing
