@@ -17,7 +17,9 @@ const BUILT_IN = [
 ];
 const PER_POST = 50;
 const MAX_KINDS = 48;
-const PER_ACCOUNT = 3;   // stickers each account can submit; the owner has no limit
+const PER_ACCOUNT = 3;   // stickers each account or browser can submit; the owner has no limit
+const MAX_WAITING = 20;  // signed-out submissions waiting for the owner, all told
+const SUBMIT_PER_NETWORK = 6;  // signed-out submissions an hour from one network
 const OWNER = "owner";
 const PER_NETWORK = 60;  // new stickers an hour from one network while signed out
 
@@ -105,7 +107,7 @@ function add(app, e, postId, body) {
   let custom = "";
   if (/^u_[a-z0-9]{15}$/.test(kind)) {
     custom = kind.slice(2);
-    if (!u.findOne(app, "sticker_kinds", "id = {:id}", { id: custom })) throw new BadRequestError("Unknown sticker.");
+    if (!u.findOne(app, "sticker_kinds", "id = {:id} && waiting = false", { id: custom })) throw new BadRequestError("Unknown sticker.");
   } else if (KINDS.indexOf(kind) === -1) {
     throw new BadRequestError("Unknown sticker.");
   }
@@ -150,7 +152,7 @@ function imageUrl(rec) {
 // GET /api/cymbal/sticker-kinds — every sticker there is, built-in first, so the page
 // can draw any placed one. Open to everyone, like the stickers themselves.
 function kinds(app) {
-  const uploads = app.findRecordsByFilter("sticker_kinds", "id != ''", "created,id", MAX_KINDS, 0);
+  const uploads = app.findRecordsByFilter("sticker_kinds", "waiting = false", "created,id", MAX_KINDS, 0);
   return {
     kinds: BUILT_IN.map((k) => Object.assign({ uploaded: false }, k)).concat(uploads.map((r) => ({
       id: "u_" + r.id,
@@ -162,11 +164,23 @@ function kinds(app) {
 }
 
 // POST /api/cymbal/sticker-kinds  multipart: label, image (a PNG up to 1 MB)
+// Signed in, it's live straight away. Signed out, it waits for the owner to approve it.
 function addKind(app, e) {
   const u = util();
   const owner = u.isOwner(e);
-  if (!owner && app.countRecords("sticker_kinds", $dbx.hashExp({ author: e.auth.id })) >= PER_ACCOUNT) {
+  const member = !!e.auth && e.auth.collection().name === "users";
+  const key = member ? "" : u.writerKey(e, true);
+  const ip = member ? "" : u.ipHash(e);
+  const mine = member ? $dbx.hashExp({ author: e.auth.id }) : $dbx.hashExp({ author_key: key });
+  if (!owner && app.countRecords("sticker_kinds", mine) >= PER_ACCOUNT) {
     throw new BadRequestError("You've submitted " + PER_ACCOUNT + " stickers already.");
+  }
+  if (!member) {
+    u.enforceRate(app, "sticker_kinds", "ip_hash", ip, SUBMIT_PER_NETWORK,
+      "Lots of stickers from your network in the last hour. Give it a little while.");
+    if (app.countRecords("sticker_kinds", $dbx.hashExp({ waiting: true })) >= MAX_WAITING) {
+      throw new BadRequestError("There are lots of stickers waiting to be looked at already. Try again in a few days.");
+    }
   }
   const body = e.requestInfo().body || {};
   const label = u.cleanText(body.label, 32, "A sticker name");
@@ -174,17 +188,40 @@ function addKind(app, e) {
   let files = [];
   try { files = e.findUploadedFiles("image") || []; } catch (_) { files = []; }
   if (files.length !== 1) throw new BadRequestError("Choose one PNG file.");
-  if (app.countRecords("sticker_kinds") >= MAX_KINDS) throw new BadRequestError("That's " + MAX_KINDS + " stickers already. Remove one first.");
+  if (app.countRecords("sticker_kinds", $dbx.hashExp({ waiting: false })) >= MAX_KINDS) throw new BadRequestError("That's " + MAX_KINDS + " stickers already. Remove one first.");
   const rec = new Record(app.findCollectionByNameOrId("sticker_kinds"));
   rec.set("label", label);
   rec.set("image", files[0]);
-  rec.set("author", e.auth.id);
+  rec.set("author", member ? e.auth.id : "");
+  rec.set("author_key", key);
+  rec.set("ip_hash", ip);
+  rec.set("waiting", !member);
   try {
     app.save(rec);
   } catch (err) {
     throw new BadRequestError("That file wasn't accepted. Stickers are PNGs up to 1 MB.");
   }
-  return { kind: { id: "u_" + rec.id, label: label, src: imageUrl(rec), uploaded: true } };
+  return { kind: { id: "u_" + rec.id, label: label, src: imageUrl(rec), uploaded: true, waiting: !member } };
+}
+
+// GET /api/cymbal/owner/sticker-kinds/waiting — signed-out submissions, oldest first.
+function waitingKinds(app) {
+  return {
+    kinds: app.findRecordsByFilter("sticker_kinds", "waiting = true", "created,id", MAX_WAITING, 0).map((r) => ({
+      id: "u_" + r.id, label: r.getString("label"), src: imageUrl(r), uploaded: true, waiting: true,
+    })),
+  };
+}
+
+// POST /api/cymbal/owner/sticker-kinds/{id}/approve — everyone can stick it from now on.
+function approveKind(app, id) {
+  const m = /^u_([a-z0-9]{15})$/.exec(String(id || ""));
+  const rec = m ? util().findOne(app, "sticker_kinds", "id = {:id} && waiting = true", { id: m[1] }) : null;
+  if (!rec) throw new NotFoundError("No such sticker waiting.");
+  if (app.countRecords("sticker_kinds", $dbx.hashExp({ waiting: false })) >= MAX_KINDS) throw new BadRequestError("That's " + MAX_KINDS + " stickers already. Remove one first.");
+  rec.set("waiting", false);
+  app.save(rec);
+  return { kind: { id: "u_" + rec.id, label: rec.getString("label"), src: imageUrl(rec), uploaded: true } };
 }
 
 // DELETE /api/cymbal/owner/sticker-kinds/{id} — and every placed sticker made from it.
@@ -230,5 +267,6 @@ function leaderboard(app) {
 
 module.exports = {
   byPost: byPost, add: add, move: move, remove: remove,
-  kinds: kinds, addKind: addKind, removeKind: removeKind, leaderboard: leaderboard,
+  kinds: kinds, addKind: addKind, removeKind: removeKind, waitingKinds: waitingKinds,
+  approveKind: approveKind, leaderboard: leaderboard,
 };

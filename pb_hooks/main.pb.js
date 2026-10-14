@@ -120,10 +120,11 @@ routerAdd("DELETE", "/api/cymbal/me/profile", (e) => {
   return e.json(200, require(__hooks + "/lib/profiles.js").clear(e.app, e));
 }, $apis.requireAuth("users"));
 
-// Anyone signed in can submit a sticker (a few each); only the owner removes one.
+// Anyone can submit a sticker (a few each). Signed out, it waits for the owner to
+// approve it; only the owner removes one.
 routerAdd("POST", "/api/cymbal/sticker-kinds", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").addKind(e.app, e));
-}, $apis.requireAuth("users"));
+});
 
 // ── owner ───────────────────────────────────────────────────────────────────
 
@@ -223,6 +224,16 @@ routerAdd("POST", "/api/cymbal/owner/apple/complete", (e) => {
 routerAdd("DELETE", "/api/cymbal/owner/sticker-kinds/{id}", (e) => {
   require(__hooks + "/lib/util.js").requireOwner(e);
   return e.json(200, require(__hooks + "/lib/stickers.js").removeKind(e.app, e.request.pathValue("id")));
+}, $apis.requireAuth("users"));
+
+routerAdd("GET", "/api/cymbal/owner/sticker-kinds/waiting", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").waitingKinds(e.app));
+}, $apis.requireAuth("users"));
+
+routerAdd("POST", "/api/cymbal/owner/sticker-kinds/{id}/approve", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").approveKind(e.app, e.request.pathValue("id")));
 }, $apis.requireAuth("users"));
 
 // ── the worker ──────────────────────────────────────────────────────────────

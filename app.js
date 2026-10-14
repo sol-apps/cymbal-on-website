@@ -1847,7 +1847,6 @@
   async function loadStickerAdmin() {
     const box = $("sticker-admin");
     if (!box) return;
-    if (!memberNow) { box.hidden = true; box.replaceChildren(); return; }
     box.hidden = false;
     await loadKinds();
     const status = h("p", { id: "sticker-status", class: "status", role: "status", "aria-live": "polite" });
@@ -1872,9 +1871,11 @@
       go.disabled = true;
       say("sticker-status", "Uploading…");
       try {
-        await api("/api/cymbal/sticker-kinds", { method: "POST", body: body });
+        const res = await api("/api/cymbal/sticker-kinds", { method: "POST", body: body });
         await loadStickerAdmin();
-        say("sticker-status", "Added. Everyone can stick it on posts now.", "ok");
+        say("sticker-status", res.kind.waiting
+          ? "Sent. It joins the stickers once it's approved."
+          : "Added. Everyone can stick it on posts now.", "ok");
       } catch (err) {
         say("sticker-status", err.message, "error");
       } finally {
@@ -1892,7 +1893,30 @@
           await loadStickerAdmin();
         } catch (err) { say("sticker-status", err.message, "error"); }
       } }, "remove") : null))) : null;
-    box.replaceChildren(...[h("h2", { class: "label" }, "SUBMIT YOUR OWN STICKER"), form, list].filter(Boolean));
+    // The owner sees what signed-out people have sent, to approve or remove.
+    let waiting = null;
+    if (ownerNow) {
+      let data = { kinds: [] };
+      try { data = await api("/api/cymbal/owner/sticker-kinds/waiting"); } catch (_) { /* shown next time */ }
+      const decide = (k, approve) => async () => {
+        if (!approve && !confirm("Turn down the " + k.label + " sticker?")) return;
+        try {
+          await api("/api/cymbal/owner/sticker-kinds/" + encodeURIComponent(k.id) + (approve ? "/approve" : ""), { method: approve ? "POST" : "DELETE" });
+          await loadStickerAdmin();
+          say("sticker-status", approve ? k.label + " approved. Everyone can stick it now." : k.label + " turned down.", "ok");
+        } catch (err) { say("sticker-status", err.message, "error"); }
+      };
+      if (data.kinds.length) {
+        waiting = h("div", { class: "kind-waiting" }, h("h3", { class: "label" }, "WAITING FOR YOU"),
+          h("ul", { class: "kind-list" }, data.kinds.map((k) => h("li", { class: "kind" },
+            h("img", { src: k.src, alt: "" }),
+            h("span", null, k.label),
+            h("button", { class: "btn btn-small btn-primary", type: "button", onclick: decide(k, true) }, "APPROVE"),
+            h("button", { class: "link-btn", type: "button", onclick: decide(k, false) }, "remove")))));
+      }
+    }
+    const note = memberNow ? null : h("p", { class: "small" }, "Signed out, a sticker you send is looked at before anyone can use it.");
+    box.replaceChildren(...[h("h2", { class: "label" }, "SUBMIT YOUR OWN STICKER"), waiting, note, form, list].filter(Boolean));
     if (arrived) {
       box.scrollIntoView({ block: "start" });
       if (!matchMedia("(pointer: coarse)").matches) label.focus({ preventScroll: true });
@@ -1957,11 +1981,6 @@
     if (miscHere && changed) {
       loadProfile();
       loadStickerAdmin();
-      // The + beside a post's stickers lands here; submitting one needs an account.
-      if (location.hash === "#sticker-admin" && !memberNow && $("owner-login").hidden) {
-        $("account").click();
-        say("owner-login-status", "Sign in or make an account to submit a sticker.");
-      }
     }
     if (onFeed && whoState !== null && changed) loadFeed(true);
     whoState = who;
