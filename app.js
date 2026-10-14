@@ -314,6 +314,17 @@
     }));
   }
 
+  // The same song on the other services, as plain links, once Cymbal has found it there.
+  // A service it hasn't found (yet) gets no link, and the post's own service is left out.
+  function altLinks(p) {
+    const links = ORDER.filter((prov) => prov !== p.source)
+      .map((prov) => ({ prov: prov, url: p.sync && p.sync[prov] && p.sync[prov].url }))
+      .filter((l) => l.url && safeHref(l.url));
+    if (!links.length) return null;
+    return h("p", { class: "alt-links" }, links.flatMap((l, i) => [i ? " · " : null,
+      h("a", { href: l.url, target: "_blank", rel: "noopener noreferrer" }, LABELS[l.prov])]));
+  }
+
   // A stable colour per name, so people are recognisable down the feed.
   function avatar(name) {
     let n = 0;
@@ -407,7 +418,7 @@
           h("h3", { class: "track" + (p.title ? "" : " resolving") }, extLink(p.url, title)),
           p.artist ? h("p", { class: "artist" }, p.artist) : null),
       player(p),
-      compact ? null : syncChips(p),
+      on("altLinks") ? altLinks(p) : compact ? null : syncChips(p),
       h("div", { class: "card-actions" },
         h("button", {
           class: merged ? "comment-btn js-toggle" : "btn btn-small js-toggle" + (on("plusComment") ? " btn-tiny" : ""), type: "button",
