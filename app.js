@@ -1133,6 +1133,17 @@
 
   $("owner-login-cancel").addEventListener("click", closeLogin);
 
+  // miscTidy: the folded sign-in form's two buttons open it in either mode.
+  [["login-open-in", "in"], ["login-open-up", "up"]].forEach(([id, m]) => {
+    const b = $(id);
+    if (!b) return;
+    b.addEventListener("click", () => {
+      loginMode(m);
+      $("owner-login").classList.remove("folded");
+      (m === "up" ? $("owner-name") : $("owner-email")).focus();
+    });
+  });
+
   $("owner-login").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const email = $("owner-email").value.trim();
@@ -1857,10 +1868,15 @@
     const label = h("input", { id: "sticker-label", type: "text", maxlength: "32", placeholder: "Sticker name, e.g. A blue moon", required: true });
     const file = h("input", { id: "sticker-file", type: "file", accept: "image/png", required: true });
     const go = h("button", { class: "btn btn-small btn-primary", type: "submit" }, "UPLOAD");
+    // miscTidy: the browser's own file box is swapped for a button and the file's name.
+    const picked = h("span", { class: "file-name" }, "No file chosen");
+    file.addEventListener("change", () => { picked.textContent = (file.files && file.files[0] && file.files[0].name) || "No file chosen"; });
     const form = h("form", { class: "sticker-upload", novalidate: true },
       h("label", { class: "visually-hidden", for: "sticker-label" }, "Sticker name"), label,
       h("label", { class: "label", for: "sticker-file" }, "PNG ", h("span", { class: "label-note" }, "up to 1 MB; a transparent background works best")), file,
-      h("div", { class: "row" }, go), status);
+      h("div", { class: "row" },
+        on("miscTidy") ? h("label", { class: "btn btn-small file-btn", for: "sticker-file" }, "CHOOSE A PNG") : null,
+        on("miscTidy") ? picked : null, go), status);
     // Arriving from a post's +, go straight to the form the first time it's drawn.
     const arrived = location.hash === "#sticker-admin" && !box.children.length;
     form.addEventListener("submit", async (ev) => {
@@ -1982,8 +1998,12 @@
       $("owner").replaceChildren();
       stopApple();
     }
-    // With signInOnMisc, Misc keeps the sign-in form open for anyone signed out.
-    if (miscHere && !user && on("signInOnMisc")) $("owner-login").hidden = false;
+    // With signInOnMisc, Misc keeps the sign-in form open for anyone signed out;
+    // miscTidy folds it to two buttons until one is tapped.
+    if (miscHere && !user && on("signInOnMisc")) {
+      $("owner-login").hidden = false;
+      $("owner-login").classList.toggle("folded", on("miscTidy") && mode === "in");
+    }
     if (miscHere && changed) {
       loadProfile();
       loadStickerAdmin();
