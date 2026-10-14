@@ -1,9 +1,10 @@
 /// <reference path="../../pb_data/types.d.ts" />
 /*
  * lib/stickers.js — hearts, stars and the owner's uploaded PNGs stuck on posts.
- * Everyone sees them. Anyone signed in can place one per post, and move or take back
- * only their own. They are filed by account, not browser: the owner's under OWNER
- * (as they always were), everyone else's under "user:" + their account id.
+ * Everyone sees them, and anyone can place one per post, and move or take back only
+ * their own. Signed in, they are filed by account: the owner's under OWNER (as they
+ * always were), everyone else's under "user:" + their account id. Signed out, they
+ * are filed by browser, under the browser key's hash, the way posts and comments are.
  *
  * A sticker's kind is "heart" or "star" for the built-in two, or "u_<record id>" for
  * an upload in sticker_kinds.
@@ -18,6 +19,7 @@ const PER_POST = 50;
 const MAX_KINDS = 48;
 const PER_ACCOUNT = 3;   // stickers each account can submit; the owner has no limit
 const OWNER = "owner";
+const PER_NETWORK = 60;  // new stickers an hour from one network while signed out
 
 function util() {
   return require(__hooks + "/lib/util.js");
@@ -28,9 +30,10 @@ function kindOf(rec) {
   return custom ? "u_" + custom : rec.getString("kind");
 }
 
-// Whose stickers a request places and picks up: "" when nobody is signed in.
+// Whose stickers a request places and picks up: the account when signed in, else the
+// browser key's hash ("" with no key).
 function keyOf(e) {
-  if (!e.auth || e.auth.collection().name !== "users") return "";
+  if (!e.auth || e.auth.collection().name !== "users") return util().writerKey(e, false);
   return util().isOwner(e) ? OWNER : "user:" + e.auth.id;
 }
 
@@ -94,7 +97,8 @@ function ownSticker(app, e, id) {
 function add(app, e, postId, body) {
   const u = util();
   const who = keyOf(e);
-  if (!who) throw new UnauthorizedError("Sign in to place stickers.");
+  if (!who) u.writerKey(e, true); // throws: no account and no browser key
+  const signedOut = !e.auth;
   if (!/^[a-z0-9]{15}$/.test(String(postId || ""))) throw new NotFoundError("No such post.");
   if (!u.findOne(app, "posts", "id = {:id} && deleted = false", { id: postId })) throw new NotFoundError("No such post.");
   const kind = String(body.kind || "");
@@ -110,9 +114,13 @@ function add(app, e, postId, body) {
     if (app.countRecords("stickers", $dbx.hashExp({ post: postId })) >= PER_POST) {
       throw new BadRequestError("That post has " + PER_POST + " stickers already.");
     }
+    const ip = signedOut ? u.ipHash(e) : "";
+    u.enforceRate(app, "stickers", "ip_hash", ip, PER_NETWORK,
+      "Lots of stickers from your network in the last hour. Give it a little while.");
     rec = new Record(app.findCollectionByNameOrId("stickers"));
     rec.set("post", postId);
     rec.set("author_key", who);
+    rec.set("ip_hash", ip);
   }
   rec.set("kind", custom ? "" : kind);
   rec.set("custom", custom);

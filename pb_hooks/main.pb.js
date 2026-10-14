@@ -11,7 +11,7 @@
  *     reads, and posts under a typed name. A browser's private key (X-Cymbal-Key)
  *     says which posts are its own; rate limits are per key and per network.
  *   - anyone can make an account (POST /api/cymbal/signup) and sign in with email
- *     and password. Signed-in people place stickers (requireAuth("users")).
+ *     and password. Anyone places stickers: by account signed in, by browser key out.
  *   - /api/cymbal/owner/* requires a signed-in `users` record with role "admin":
  *     the owner. Removing posts and comments is the owner's alone too. Role is set
  *     by a superuser in the dashboard; sign-up always makes "user" and no request
@@ -92,19 +92,20 @@ routerAdd("GET", "/api/cymbal/playlists", (e) => {
 });
 
 // ── anyone signed in ────────────────────────────────────────────────────────
-// Stickers: one each per post, and only your own can be moved or taken back.
+// Stickers: one each per post, signed in or not, and only your own can be moved or
+// taken back.
 
 routerAdd("POST", "/api/cymbal/posts/{id}/stickers", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").add(e.app, e, e.request.pathValue("id"), e.requestInfo().body || {}));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("POST", "/api/cymbal/stickers/{id}/move", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").move(e.app, e, e.request.pathValue("id"), e.requestInfo().body || {}));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("DELETE", "/api/cymbal/stickers/{id}", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").remove(e.app, e, e.request.pathValue("id")));
-}, $apis.requireAuth("users"));
+});
 
 // Your account's picture, shown on the posts you make while signed in.
 routerAdd("GET", "/api/cymbal/me/profile", (e) => {

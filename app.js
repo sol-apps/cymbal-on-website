@@ -755,7 +755,7 @@
   }
 
   // ── stickers in the comment box (stickerButton) ───────────────────────────
-  // Signed in, + COMMENT opens the comment box with a row of every kind above it. Tap
+  // + COMMENT opens the comment box with a row of every kind above it. Tap
   // one and it sticks on that post straight away; drag one and it goes wherever it's
   // let go. Picked up, it leaves its spot in the row empty until it's let go, as if
   // it had really been peeled off.
@@ -767,7 +767,6 @@
         onpointerdown: (ev) => {
           if (carry || ev.button > 0) return;
           ev.preventDefault();
-          if (!memberNow) return askToSignIn("Sign in or make an account to stick stickers on posts.");
           const pick = ev.currentTarget;
           startCarry(k.id, ev, null);
           carry.home = card;
@@ -776,7 +775,6 @@
         },
         onclick: (ev) => {
           if (carry || ev.detail !== 0) return; // keyboard: stick it here
-          if (!memberNow) return askToSignIn("Sign in or make an account to stick stickers on posts.");
           stickHere(card, k.id);
         },
       }, h("img", { src: stickerSrc(k.id), alt: "", draggable: "false" }), h("span", { class: "visually-hidden" }, k.label))));
@@ -1110,14 +1108,6 @@
     img.id = "account-avatar";
     img.classList.add("account-avatar");
     old.replaceWith(img);
-  }
-
-  // Something that needs an account was tapped while signed out: open the sign-in form
-  // with a line saying why.
-  function askToSignIn(why) {
-    if ($("owner-login").hidden) $("account").click();
-    $("owner-login").scrollIntoView({ block: "nearest", behavior: "smooth" });
-    say("owner-login-status", why);
   }
 
   $("account").addEventListener("click", () => {
