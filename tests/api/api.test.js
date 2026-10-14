@@ -421,10 +421,10 @@ test("only the owner removes a post or comment", async () => {
   assert.ok(Object.values(all).every((r) => r.status === "cancelled" || r.status === "synced"));
 });
 
-test("stickers: everyone sees them; anyone signed in places one per post and moves only their own", async () => {
+test("stickers: everyone sees them; anyone places one per post and moves only their own", async () => {
   const post = await share("cat", "https://open.spotify.com/track/" + randomSpotifyId(), "stick something on this");
   const path = "/api/cymbal/posts/" + post.id + "/stickers";
-  assert.equal((await call("POST", path, { key: U.ann.key, body: { kind: "heart", x: 0.5, y: 10 } })).status, 401, "no session");
+  assert.equal((await call("POST", path, { ip: U.nokey.ip, body: { kind: "heart", x: 0.5, y: 10 } })).status, 400, "no session and no browser key");
 
   const heart = await as("owner").post(path, { kind: "heart", x: 0.25, y: 40, rot: -8 });
   assert.equal(heart.status, 200, heart.text);
@@ -467,7 +467,7 @@ test("stickers: everyone sees them; anyone signed in places one per post and mov
 
   const moveTo = "/api/cymbal/stickers/" + star.json.sticker.id + "/move";
   assert.equal((await call("POST", moveTo, { token: U.member.token, body: { x: 0.9, y: 5 } })).status, 403);
-  assert.equal((await call("POST", moveTo, { key: U.ann.key, body: { x: 0.9, y: 5 } })).status, 401);
+  assert.equal((await call("POST", moveTo, { key: U.ann.key, body: { x: 0.9, y: 5 } })).status, 403, "signed out, still not yours");
   const moved = await as("owner").post(moveTo, { x: 0.9, y: 120, rot: 4 });
   assert.equal(moved.status, 200, moved.text);
   assert.deepEqual([moved.json.sticker.x, moved.json.sticker.y, moved.json.sticker.rot], [0.9, 120, 4]);
@@ -479,6 +479,22 @@ test("stickers: everyone sees them; anyone signed in places one per post and mov
   const after = (await as("owner").get("/api/cymbal/feed")).json.posts;
   assert.deepEqual(after.find((p) => p.id === post.id).stickers.map((s) => [s.kind, s.x, s.y]), [["star", 0.9, 120]]);
   assert.deepEqual(after.find((p) => p.id === other.id).stickers, []);
+
+  // Signed out, a browser gets one each too, filed under its key, and it's that
+  // browser's to move or take back.
+  const anns = await as("ann").post(path, { kind: "heart", x: 0.3, y: 30 });
+  assert.equal(anns.status, 200, anns.text);
+  assert.equal(anns.json.sticker.mine, true);
+  assert.equal((await as("ann").post(path, { kind: "star", x: 0.4, y: 30 })).json.sticker.id, anns.json.sticker.id, "one each per browser");
+  const theirOwn = await as("ben").post(path, { kind: "heart", x: 0.2, y: 50 });
+  assert.notEqual(theirOwn.json.sticker.id, anns.json.sticker.id, "another browser has its own");
+  const annSees = (await as("ann").get("/api/cymbal/feed")).json.posts.find((p) => p.id === post.id);
+  assert.deepEqual(annSees.stickers.map((s) => [s.id === anns.json.sticker.id, s.mine]), [[false, false], [true, true], [false, false]]);
+  const annMove = "/api/cymbal/stickers/" + anns.json.sticker.id;
+  assert.equal((await as("ben").post(annMove + "/move", { x: 0.1, y: 5 })).status, 403);
+  assert.equal((await call("POST", annMove + "/move", { token: U.member.token, body: { x: 0.1, y: 5 } })).status, 403);
+  assert.equal((await as("ann").post(annMove + "/move", { x: 0.1, y: 5 })).status, 200);
+  assert.equal((await as("ann").del(annMove)).status, 200);
 });
 
 test("listens: once per browser per post, counted for everyone", async () => {

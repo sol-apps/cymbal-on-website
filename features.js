@@ -28,7 +28,7 @@ const FEATURES = {
   altLinks: "all",            // under each post, blue links to the song on the other services
                               // (only the ones Cymbal has found); replaces the playlist chips
   outBubble: "all",           // signed out, posts get the same comment bubble and sticker row as
-                              // signed in (needs stickerButton and openComments on for them too);
-                              // tapping a sticker asks them to sign in. Only "all" reaches anyone
-                              // signed out, so "members" or "owner" changes nothing
+                              // signed in (needs stickerButton and openComments on for them too).
+                              // Only "all" reaches anyone signed out, so "members" or "owner"
+                              // changes nothing
 };
