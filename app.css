@@ -677,6 +677,34 @@ code { font-size: 12px; overflow-wrap: anywhere; }
   .misc .panel { padding: 11px; }
 }
 .profile .status:empty { min-height: 0; margin-top: 0; }
+
+/* miscTidy: you first, then signing in, playlists and the look; stickers below and
+ * the owner's panel last. No empty status gaps, a real file button, no footer link. */
+.login-intro { display: none; }
+.ff-miscTidy .misc #profile { order: 1; }
+.ff-miscTidy .misc #owner-login { order: 2; margin-top: 0; }
+.ff-miscTidy .misc #playlists { order: 3; }
+.ff-miscTidy .misc .theme-row { order: 4; }
+.ff-miscTidy .misc #leaderboard { order: 5; }
+.ff-miscTidy .misc #sticker-admin { order: 6; }
+.ff-miscTidy .misc #owner { order: 7; }
+.ff-miscTidy .misc > * > .label { font-weight: 700; margin-bottom: 0; }
+.ff-miscTidy .misc .status:empty { min-height: 0; margin-top: 0; }
+.ff-miscTidy .misc .small { color: var(--muted); font-size: 13px; margin: 0; }
+.ff-miscTidy body[data-page="misc"] .foot { display: none; }
+.ff-miscTidy .misc .owner-login { gap: 8px; }
+.ff-miscTidy .misc .owner-login input { margin-bottom: 0; }
+.ff-miscTidy .misc .owner-login.folded > :not(#owner-login-title):not(.login-intro):not(.status) { display: none; }
+.ff-miscTidy .misc .owner-login.folded .login-intro { display: grid; gap: 10px; }
+.ff-miscTidy .misc .login-intro .row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.ff-miscTidy .misc .owner-login #owner-login-mode, .ff-miscTidy .misc .owner-login #owner-login-forgot { margin-top: 0; }
+.ff-miscTidy .sticker-upload { gap: 8px; }
+.ff-miscTidy .sticker-upload input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.ff-miscTidy .sticker-upload input[type="file"]:focus-visible ~ .row .file-btn { outline: 3px solid var(--focus); }
+.ff-miscTidy .sticker-upload .row { align-items: center; gap: 10px; }
+.ff-miscTidy .sticker-upload .file-btn { cursor: pointer; }
+.ff-miscTidy .sticker-upload .file-name { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ff-miscTidy .sticker-admin .kind-list:not(.kind-waiting .kind-list) { margin-top: 4px; }
 .profile .small { margin: 0; }
 
 /* compactTop: the top bar's links are plain, not buttons. MISC is a word and your

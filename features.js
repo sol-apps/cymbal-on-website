@@ -31,6 +31,8 @@ const FEATURES = {
                               // signing out all happen on misc.html
   outPics: "all",             // signed out, a browser can set its own picture on misc.html; the
                               // posts it makes show it
+  miscTidy: "all",            // a tidier Misc: you first, sign-in folded to two buttons, a proper
+                              // file button, no empty gaps, no footer link
   outBubble: "all",           // signed out, posts get the same comment bubble and sticker row as
                               // signed in (needs stickerButton and openComments on for them too).
                               // Only "all" reaches anyone signed out, so "members" or "owner"
