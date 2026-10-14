@@ -613,7 +613,7 @@ test("sticker uploads: anyone submits a few PNGs, signed-out ones wait for the o
   assert.deepEqual(after.stickers, []);
 });
 
-test("profile pictures: an account sets its own, and the posts it makes show it", async () => {
+test("profile pictures: an account or a browser sets its own, and the posts it makes show it", async () => {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
   const upload = async (who, bytes, type) => {
     const fd = new FormData();
@@ -624,8 +624,7 @@ test("profile pictures: an account sets its own, and the posts it makes show it"
     const res = await fetch(BASE + "/api/cymbal/me/profile", { method: "POST", headers, body: fd });
     return { status: res.status, json: await res.json().catch(() => null) };
   };
-  assert.equal((await upload("ann", png, "image/png")).status, 401, "a browser alone can't have one");
-  assert.equal((await as("ann").get("/api/cymbal/me/profile")).status, 401);
+  assert.equal((await call("GET", "/api/cymbal/me/profile", { ip: U.nokey.ip })).status, 400, "signed out, a browser key is needed");
   assert.equal((await upload("member", Buffer.from("nope"), "text/plain")).status, 400);
   assert.equal((await as("member").get("/api/cymbal/me/profile")).json.pic, "");
   const set = await upload("member", png, "image/png");
@@ -640,9 +639,23 @@ test("profile pictures: an account sets its own, and the posts it makes show it"
   // The same browser, signed out: no picture, because the picture is the account's.
   const signedOut = await call("POST", "/api/cymbal/posts", { key: U.member.key, ip: U.member.ip, body: { url: spUrl(randomSpotifyId()), name: "Mem", request_id: rid() } });
   assert.equal(signedOut.status, 200, signedOut.text);
-  const feed = (await call("GET", "/api/cymbal/feed")).json.posts;
+  let feed = (await call("GET", "/api/cymbal/feed")).json.posts;
   assert.equal(feed.find((p) => p.id === signedIn.id).pic, set.json.pic, "posts made signed in show it");
   assert.equal(feed.find((p) => p.id === signedOut.json.post.id).pic, "", "posts made signed out don't");
+
+  // Signed out, a browser has a picture of its own, on the posts it makes.
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, "");
+  const annPic = await upload("ann", png, "image/png");
+  assert.equal(annPic.status, 200, JSON.stringify(annPic.json));
+  assert.notEqual(annPic.json.pic, set.json.pic);
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, annPic.json.pic);
+  assert.equal((await as("ben").get("/api/cymbal/me/profile")).json.pic, "", "another browser has its own");
+  const annPost = await share("ann", spUrl(randomSpotifyId()), "my face");
+  feed = (await call("GET", "/api/cymbal/feed")).json.posts;
+  assert.equal(feed.find((p) => p.id === annPost.id).pic, annPic.json.pic);
+  assert.equal(feed.find((p) => p.id === signedOut.json.post.id).pic, "", "still not on another browser's posts");
+  assert.equal((await as("ann").del("/api/cymbal/me/profile")).status, 200);
+  assert.equal((await as("ann").get("/api/cymbal/me/profile")).json.pic, "");
 
   assert.equal((await as("member").del("/api/cymbal/me/profile")).status, 200);
   assert.equal((await as("member").get("/api/cymbal/me/profile")).json.pic, "");

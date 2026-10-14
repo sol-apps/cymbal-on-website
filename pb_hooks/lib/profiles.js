@@ -1,12 +1,13 @@
 /// <reference path="../../pb_data/types.d.ts" />
 /*
- * lib/profiles.js — a picture for an account. Anyone signed in can set one; the posts
- * that account makes show it. Rows are keyed "user:" + the account id. Nothing returned
- * says whose a picture is: a reader only ever gets the image's URL.
+ * lib/profiles.js — a picture for an account or a browser. Anyone can set one; the
+ * posts made from that account (or, signed out, that browser) show it. Rows are keyed
+ * "user:" + the account id, or the browser key's hash when signed out, the way posts
+ * are. Nothing returned says whose a picture is: a reader only ever gets the image's URL.
  */
 
 const PER_IP_HOUR = 20;   // new pictures from one network in an hour
-const MIN_GAP_MS = 15000; // between changes from one account
+const MIN_GAP_MS = 15000; // between changes from one account or browser
 
 function util() {
   return require(__hooks + "/lib/util.js");
@@ -17,7 +18,7 @@ function imageUrl(rec) {
 }
 
 function keyOf(e) {
-  if (!e.auth || e.auth.collection().name !== "users") throw new UnauthorizedError("Sign in to set a picture.");
+  if (!e.auth || e.auth.collection().name !== "users") return util().writerKey(e, true);
   return "user:" + e.auth.id;
 }
 
@@ -65,15 +66,21 @@ function clear(app, e) {
   return { pic: "" };
 }
 
-// { accountId: url } for the given account ids.
-function picsByAccount(app, ids) {
+// Whose picture a post shows: its account's, or, posted signed out, its browser's.
+function postKey(rec) {
+  const account = rec.getString("author");
+  return account ? "user:" + account : rec.getString("author_key");
+}
+
+// { key: url } for the given posts, keyed by postKey().
+function picsByPost(app, rows) {
   const out = {};
-  const wanted = ids.filter((id) => !!id).map((id) => "user:" + id);
+  const wanted = rows.map(postKey).filter((k) => !!k);
   if (!wanted.length) return out;
   app.findAllRecords("profiles", $dbx.in("author_key", ...wanted)).forEach((r) => {
-    if (r) out[r.getString("author_key").slice(5)] = imageUrl(r);
+    if (r) out[r.getString("author_key")] = imageUrl(r);
   });
   return out;
 }
 
-module.exports = { get: get, set: set, clear: clear, picsByAccount: picsByAccount };
+module.exports = { get: get, set: set, clear: clear, postKey: postKey, picsByPost: picsByPost };

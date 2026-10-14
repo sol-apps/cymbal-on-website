@@ -107,18 +107,19 @@ routerAdd("DELETE", "/api/cymbal/stickers/{id}", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").remove(e.app, e, e.request.pathValue("id")));
 });
 
-// Your account's picture, shown on the posts you make while signed in.
+// Your picture, shown on the posts you make: the account's while signed in, this
+// browser's while signed out.
 routerAdd("GET", "/api/cymbal/me/profile", (e) => {
   return e.json(200, require(__hooks + "/lib/profiles.js").get(e.app, e));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("POST", "/api/cymbal/me/profile", (e) => {
   return e.json(200, require(__hooks + "/lib/profiles.js").set(e.app, e));
-}, $apis.requireAuth("users"));
+});
 
 routerAdd("DELETE", "/api/cymbal/me/profile", (e) => {
   return e.json(200, require(__hooks + "/lib/profiles.js").clear(e.app, e));
-}, $apis.requireAuth("users"));
+});
 
 // Anyone can submit a sticker (a few each). Signed out, it waits for the owner to
 // approve it; only the owner removes one.

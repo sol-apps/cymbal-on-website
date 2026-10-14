@@ -1761,7 +1761,7 @@
   async function loadProfile() {
     const box = $("profile");
     if (!box) return;
-    if (!memberNow) { box.hidden = true; box.replaceChildren(); return; }
+    if (!memberNow && !on("outPics")) { box.hidden = true; box.replaceChildren(); return; }
     box.hidden = false;
     let pic = "";
     try { pic = (await api("/api/cymbal/me/profile")).pic; } catch (_) { /* shown as none */ }
@@ -1779,7 +1779,8 @@
         await api("/api/cymbal/me/profile", { method: "POST", body: body });
         await loadProfile();
         if (PBAuth.user()) showAccountPic(PBAuth.user().id);
-        say("profile-status", "Saved. Your posts show it now.", "ok");
+        say("profile-status", memberNow ? "Saved. Your posts show it now."
+          : "Saved. Posts you make from this browser show it now.", "ok");
       } catch (err) {
         say("profile-status", err.message, "error");
       }
@@ -1817,6 +1818,9 @@
                 say("profile-status", "Picture removed.", "ok");
               } catch (err) { say("profile-status", err.message, "error"); }
             } }, "remove") : null))),
+      // With signInOnMisc the top bar has no menu, so signing out lives here.
+      account && on("signInOnMisc") ? h("p", { class: "profile-account" }, "Signed in as " + (account.email || account.name) + " · ",
+        h("button", { class: "link-btn", type: "button", onclick: () => PBAuth.signOut() }, "sign out")) : "",
       status);
   }
 
@@ -1978,6 +1982,8 @@
       $("owner").replaceChildren();
       stopApple();
     }
+    // With signInOnMisc, Misc keeps the sign-in form open for anyone signed out.
+    if (miscHere && !user && on("signInOnMisc")) $("owner-login").hidden = false;
     if (miscHere && changed) {
       loadProfile();
       loadStickerAdmin();
