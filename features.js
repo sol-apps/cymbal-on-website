@@ -27,6 +27,10 @@ const FEATURES = {
                               // a small send button, and a small name box only when signed out
   altLinks: "all",            // under each post, blue links to the song on the other services
                               // (only the ones Cymbal has found); replaces the playlist chips
+  signInOnMisc: "all",        // no sign-in in the top bar: signing in, making an account and
+                              // signing out all happen on misc.html
+  outPics: "all",             // signed out, a browser can set its own picture on misc.html; the
+                              // posts it makes show it
   outBubble: "all",           // signed out, posts get the same comment bubble and sticker row as
                               // signed in (needs stickerButton and openComments on for them too).
                               // Only "all" reaches anyone signed out, so "members" or "owner"

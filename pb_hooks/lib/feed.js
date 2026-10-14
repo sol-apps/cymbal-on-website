@@ -95,12 +95,13 @@ function views(app, rows, e) {
   const syncs = syncsByPost(app, rows.map((r) => r.id));
   const stickers = require(__hooks + "/lib/stickers.js").byPost(app, rows.map((r) => r.id), e);
   const comments = commentPreviews(app, rows, keyHash, owner);
-  const pics = require(__hooks + "/lib/profiles.js").picsByAccount(app, rows.map((r) => r.getString("author")));
+  const profiles = require(__hooks + "/lib/profiles.js");
+  const pics = profiles.picsByPost(app, rows);
   return rows.map((r) => {
     const v = postView(r, syncs[r.id], keyHash, owner);
     v.stickers = stickers[r.id] || [];
     v.comments = comments[r.id] || [];
-    v.pic = pics[r.getString("author")] || "";
+    v.pic = pics[profiles.postKey(r)] || "";
     return v;
   });
 }

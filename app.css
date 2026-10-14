@@ -264,6 +264,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .owner-login .row { display: flex; gap: 8px; justify-content: flex-end; }
 .owner-login .status:empty { min-height: 0; margin-top: 0; }
 .owner-login [hidden] { display: none; }
+/* signInOnMisc: the top bar has no sign-in; on Misc the form simply stays open. */
+.ff-signInOnMisc .top .account { display: none; }
+.ff-signInOnMisc body[data-page="misc"] #owner-login-cancel { display: none; }
+.profile-account { font-size: 13px; color: var(--muted); margin: 10px 0 0; overflow-wrap: anywhere; }
 .owner-login #owner-login-mode, .owner-login #owner-login-forgot { justify-self: start; margin-top: 4px; }
 
 /* ── feed ───────────────────────────────────────────────────────────────── */
