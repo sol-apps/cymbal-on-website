@@ -665,6 +665,10 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .kind > span:first-of-type { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .sticker-upload { display: grid; gap: 4px; }
 .kind-waiting { margin-bottom: 14px; }
+.auto-approve { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.auto-approve .btn { flex: none; min-width: 56px; }
+.auto-approve h3, .auto-approve p { margin: 0; }
+.auto-approve p { margin-top: 4px; }
 .kind-waiting .kind-list { border-top: 0; padding-top: 0; }
 .sticker-admin .kind-list { border-top: 2px dashed var(--line); padding-top: 10px; margin: 0; }
 .sticker-upload input[type="file"] { font: inherit; font-size: 13px; margin-bottom: 6px; max-width: 100%; }

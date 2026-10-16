@@ -576,8 +576,26 @@ test("sticker uploads: anyone submits a few PNGs, signed-out ones wait for the o
   assert.deepEqual([row.reacts, row.kinds[kind.id]], [1, 1]);
   assert.ok(!board.text.includes("author_key") && !board.text.includes("ip_hash"));
 
-  // Signed out: it waits, unseen and unstickable, until the owner approves it.
+  // Auto approval: only the owner reads or switches it, and it starts on.
+  const autoPath = "/api/cymbal/owner/sticker-approval";
+  assert.equal((await call("GET", autoPath, {})).status, 401);
+  assert.equal((await call("GET", autoPath, { token: U.member.token })).status, 403);
+  assert.equal((await call("POST", autoPath, { token: U.member.token, body: { auto: false } })).status, 403);
+  assert.equal((await as("owner").get(autoPath)).json.auto, true);
+  assert.equal((await call("GET", "/api/cymbal/sticker-kinds")).json.auto_approve, true);
+  assert.equal((await as("owner").post(autoPath, { auto: "no" })).status, 400);
   const annKey = U.ann.key, annIp = U.ann.ip;
+  const straight = await upload("", "Rocket", png, "image/png", newKey(), "198.51.100.77");
+  assert.equal(straight.status, 200, JSON.stringify(straight.json));
+  assert.equal(straight.json.kind.waiting, false, "auto approval on: live straight away");
+  assert.ok((await call("GET", "/api/cymbal/sticker-kinds")).json.kinds.some((k) => k.id === straight.json.kind.id));
+  assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + straight.json.kind.id)).status, 200);
+
+  // Off: signed out, it waits, unseen and unstickable, until the owner approves it.
+  const off = await as("owner").post(autoPath, { auto: false });
+  assert.deepEqual([off.status, off.json.auto], [200, false]);
+  assert.equal((await as("owner").get(autoPath)).json.auto, false);
+  assert.equal((await call("GET", "/api/cymbal/sticker-kinds")).json.auto_approve, false);
   const cometPost = await share("fay", "https://open.spotify.com/track/" + randomSpotifyId(), "comet");
   const sent = await upload("", "Comet", png, "image/png", annKey, annIp);
   assert.equal(sent.status, 200, JSON.stringify(sent.json));
@@ -601,6 +619,8 @@ test("sticker uploads: anyone submits a few PNGs, signed-out ones wait for the o
   const turnedDown = waiting.json.kinds[1].id;
   assert.equal((await as("owner").del("/api/cymbal/owner/sticker-kinds/" + turnedDown)).status, 200);
   assert.deepEqual((await as("owner").get(waitPath)).json.kinds.map((k) => k.label), ["Comet 3"]);
+  assert.equal((await as("owner").post(autoPath, { auto: true })).json.auto, true);
+  assert.deepEqual((await as("owner").get(waitPath)).json.kinds.map((k) => k.label), ["Comet 3"], "switching on leaves waiting ones");
 
   const theirs = kinds.find((k) => k.label === "Mem 1");
   assert.equal((await call("DELETE", "/api/cymbal/owner/sticker-kinds/" + theirs.id, { token: U.member.token })).status, 403, "not even your own");

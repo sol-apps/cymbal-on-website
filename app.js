@@ -710,6 +710,7 @@
     { id: "star", label: "A silver star", src: "stickers/star.png" },
   ];
   const kindOf = (id) => KINDS.find((k) => k.id === id);
+  let autoApprove = true; // signed-out stickers go live without the owner (the server decides)
   const stickerSrc = (kind) => { const k = kindOf(kind); return k && safeSrc(k.src) ? k.src : ""; };
   let carry = null;
 
@@ -722,6 +723,7 @@
     try {
       const data = await api("/api/cymbal/sticker-kinds");
       KINDS = data.kinds.filter((k) => safeSrc(k.src));
+      autoApprove = data.auto_approve !== false;
     } catch (_) { /* the built-in two still work */ }
   }
 
@@ -1913,9 +1915,28 @@
           await loadStickerAdmin();
         } catch (err) { say("sticker-status", err.message, "error"); }
       } }, "remove") : null))) : null;
-    // The owner sees what signed-out people have sent, to approve or remove.
+    // The owner sees what signed-out people have sent, to approve or remove, and
+    // switches whether they need approving at all.
     let waiting = null;
+    let auto = null;
     if (ownerNow) {
+      const flip = h("button", {
+        class: "btn btn-small" + (autoApprove ? " btn-primary" : ""), type: "button", "aria-pressed": String(autoApprove),
+        onclick: async () => {
+          flip.disabled = true;
+          try {
+            await api("/api/cymbal/owner/sticker-approval", { method: "POST", body: { auto: !autoApprove } });
+            await loadStickerAdmin();
+            say("sticker-status", autoApprove
+              ? "Auto approval on. Stickers sent signed out go live straight away."
+              : "Auto approval off. Stickers sent signed out wait for you here.", "ok");
+          } catch (err) { flip.disabled = false; say("sticker-status", err.message, "error"); }
+        },
+      }, autoApprove ? "ON" : "OFF");
+      auto = h("div", { class: "auto-approve" },
+        h("div", null, h("h3", { class: "label" }, "AUTO APPROVE"),
+          h("p", { class: "small" }, autoApprove ? "Stickers sent signed out go live straight away." : "Stickers sent signed out wait for you to approve them.")),
+        flip);
       let data = { kinds: [] };
       try { data = await api("/api/cymbal/owner/sticker-kinds/waiting"); } catch (_) { /* shown next time */ }
       const decide = (k, approve) => async () => {
@@ -1935,8 +1956,8 @@
             h("button", { class: "link-btn", type: "button", onclick: decide(k, false) }, "remove")))));
       }
     }
-    const note = memberNow ? null : h("p", { class: "small" }, "Signed out, a sticker you send is looked at before anyone can use it.");
-    box.replaceChildren(...[h("h2", { class: "label" }, "SUBMIT YOUR OWN STICKER"), waiting, note, form, list].filter(Boolean));
+    const note = memberNow || autoApprove ? null : h("p", { class: "small" }, "Signed out, a sticker you send is looked at before anyone can use it.");
+    box.replaceChildren(...[h("h2", { class: "label" }, "SUBMIT YOUR OWN STICKER"), auto, waiting, note, form, list].filter(Boolean));
     if (arrived) {
       box.scrollIntoView({ block: "start" });
       if (!matchMedia("(pointer: coarse)").matches) label.focus({ preventScroll: true });
