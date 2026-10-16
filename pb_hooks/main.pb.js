@@ -122,7 +122,7 @@ routerAdd("DELETE", "/api/cymbal/me/profile", (e) => {
 });
 
 // Anyone can submit a sticker (a few each). Signed out, it waits for the owner to
-// approve it; only the owner removes one.
+// approve it unless the owner has auto approval on; only the owner removes one.
 routerAdd("POST", "/api/cymbal/sticker-kinds", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").addKind(e.app, e));
 });
@@ -235,6 +235,17 @@ routerAdd("GET", "/api/cymbal/owner/sticker-kinds/waiting", (e) => {
 routerAdd("POST", "/api/cymbal/owner/sticker-kinds/{id}/approve", (e) => {
   require(__hooks + "/lib/util.js").requireOwner(e);
   return e.json(200, require(__hooks + "/lib/stickers.js").approveKind(e.app, e.request.pathValue("id")));
+}, $apis.requireAuth("users"));
+
+// Auto approval of signed-out stickers: only the owner reads or switches it.
+routerAdd("GET", "/api/cymbal/owner/sticker-approval", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, { auto: require(__hooks + "/lib/stickers.js").autoApprove(e.app) });
+}, $apis.requireAuth("users"));
+
+routerAdd("POST", "/api/cymbal/owner/sticker-approval", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").setAutoApprove(e.app, e.requestInfo().body || {}));
 }, $apis.requireAuth("users"));
 
 // ── the worker ──────────────────────────────────────────────────────────────

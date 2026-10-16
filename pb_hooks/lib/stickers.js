@@ -149,11 +149,34 @@ function imageUrl(rec) {
   return "/api/files/sticker_kinds/" + rec.id + "/" + encodeURIComponent(rec.getString("image"));
 }
 
+// Whether a sticker sent while signed out goes live straight away. The owner switches
+// it on Misc; on unless they've turned it off.
+function autoApprove(app) {
+  const row = util().findOne(app, "site_settings", "name = 'sticker_auto_approve'", {});
+  return row ? row.getBool("on") : true;
+}
+
+// POST /api/cymbal/owner/sticker-approval  { auto: true | false }
+// Turning it on leaves anything already waiting where it is, for the owner to decide.
+function setAutoApprove(app, body) {
+  if (typeof body.auto !== "boolean") throw new BadRequestError("Say auto: true or false.");
+  let row = util().findOne(app, "site_settings", "name = 'sticker_auto_approve'", {});
+  if (!row) {
+    row = new Record(app.findCollectionByNameOrId("site_settings"));
+    row.set("name", "sticker_auto_approve");
+  }
+  row.set("on", body.auto);
+  app.save(row);
+  return { auto: body.auto };
+}
+
 // GET /api/cymbal/sticker-kinds — every sticker there is, built-in first, so the page
 // can draw any placed one. Open to everyone, like the stickers themselves.
+// `auto_approve` lets the page say whether a signed-out submission will wait.
 function kinds(app) {
   const uploads = app.findRecordsByFilter("sticker_kinds", "waiting = false", "created,id", MAX_KINDS, 0);
   return {
+    auto_approve: autoApprove(app),
     kinds: BUILT_IN.map((k) => Object.assign({ uploaded: false }, k)).concat(uploads.map((r) => ({
       id: "u_" + r.id,
       label: r.getString("label"),
@@ -164,13 +187,15 @@ function kinds(app) {
 }
 
 // POST /api/cymbal/sticker-kinds  multipart: label, image (a PNG up to 1 MB)
-// Signed in, it's live straight away. Signed out, it waits for the owner to approve it.
+// Signed in, it's live straight away. Signed out, it is too while auto approval is on;
+// with it off, it waits for the owner to approve it.
 function addKind(app, e) {
   const u = util();
   const owner = u.isOwner(e);
   const member = !!e.auth && e.auth.collection().name === "users";
   const key = member ? "" : u.writerKey(e, true);
   const ip = member ? "" : u.ipHash(e);
+  const wait = !member && !autoApprove(app);
   const mine = member ? $dbx.hashExp({ author: e.auth.id }) : $dbx.hashExp({ author_key: key });
   if (!owner && app.countRecords("sticker_kinds", mine) >= PER_ACCOUNT) {
     throw new BadRequestError("You've submitted " + PER_ACCOUNT + " stickers already.");
@@ -178,7 +203,7 @@ function addKind(app, e) {
   if (!member) {
     u.enforceRate(app, "sticker_kinds", "ip_hash", ip, SUBMIT_PER_NETWORK,
       "Lots of stickers from your network in the last hour. Give it a little while.");
-    if (app.countRecords("sticker_kinds", $dbx.hashExp({ waiting: true })) >= MAX_WAITING) {
+    if (wait && app.countRecords("sticker_kinds", $dbx.hashExp({ waiting: true })) >= MAX_WAITING) {
       throw new BadRequestError("There are lots of stickers waiting to be looked at already. Try again in a few days.");
     }
   }
@@ -195,13 +220,13 @@ function addKind(app, e) {
   rec.set("author", member ? e.auth.id : "");
   rec.set("author_key", key);
   rec.set("ip_hash", ip);
-  rec.set("waiting", !member);
+  rec.set("waiting", wait);
   try {
     app.save(rec);
   } catch (err) {
     throw new BadRequestError("That file wasn't accepted. Stickers are PNGs up to 1 MB.");
   }
-  return { kind: { id: "u_" + rec.id, label: label, src: imageUrl(rec), uploaded: true, waiting: !member } };
+  return { kind: { id: "u_" + rec.id, label: label, src: imageUrl(rec), uploaded: true, waiting: wait } };
 }
 
 // GET /api/cymbal/owner/sticker-kinds/waiting — signed-out submissions, oldest first.
@@ -269,4 +294,5 @@ module.exports = {
   byPost: byPost, add: add, move: move, remove: remove,
   kinds: kinds, addKind: addKind, removeKind: removeKind, waitingKinds: waitingKinds,
   approveKind: approveKind, leaderboard: leaderboard,
+  autoApprove: autoApprove, setAutoApprove: setAutoApprove,
 };
