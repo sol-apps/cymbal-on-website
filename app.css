@@ -682,15 +682,15 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 }
 .profile .status:empty { min-height: 0; margin-top: 0; }
 
-/* miscTidy: you first, then signing in, playlists and the look; stickers below and
- * the owner's panel last. No empty status gaps, a real file button, no footer link. */
+/* miscTidy: you first, then signing in, playlists and the look; stickers below, then
+ * the owner's most reacts and the owner's panel last. No empty status gaps, a real file button, no footer link. */
 .login-intro { display: none; }
 .ff-miscTidy .misc #profile { order: 1; }
 .ff-miscTidy .misc #owner-login { order: 2; margin-top: 0; }
 .ff-miscTidy .misc #playlists { order: 3; }
 .ff-miscTidy .misc .theme-row { order: 4; }
-.ff-miscTidy .misc #leaderboard { order: 5; }
-.ff-miscTidy .misc #sticker-admin { order: 6; }
+.ff-miscTidy .misc #sticker-admin { order: 5; }
+.ff-miscTidy .misc #leaderboard { order: 6; }
 .ff-miscTidy .misc #owner { order: 7; }
 .ff-miscTidy .misc > * > .label { font-weight: 700; margin-bottom: 0; }
 .ff-miscTidy .misc .status:empty { min-height: 0; margin-top: 0; }

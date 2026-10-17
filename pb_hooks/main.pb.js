@@ -63,11 +63,6 @@ routerAdd("GET", "/api/cymbal/sticker-kinds", (e) => {
   return e.json(200, require(__hooks + "/lib/stickers.js").kinds(e.app));
 });
 
-// The posts with the most reacts, for the Misc page. Public, like the feed it's drawn from.
-routerAdd("GET", "/api/cymbal/leaderboard", (e) => {
-  return e.json(200, require(__hooks + "/lib/stickers.js").leaderboard(e.app));
-});
-
 // "Forgot your password?" uses PocketBase's own reset (POST
 // /api/collections/users/request-password-reset, then confirm-password-reset). Its
 // email needs SMTP set in the dashboard (Settings > Mail settings). This only swaps the
@@ -128,6 +123,12 @@ routerAdd("POST", "/api/cymbal/sticker-kinds", (e) => {
 });
 
 // ── owner ───────────────────────────────────────────────────────────────────
+
+// The posts with the most reacts, for the owner on the Misc page.
+routerAdd("GET", "/api/cymbal/owner/leaderboard", (e) => {
+  require(__hooks + "/lib/util.js").requireOwner(e);
+  return e.json(200, require(__hooks + "/lib/stickers.js").leaderboard(e.app));
+}, $apis.requireAuth("users"));
 
 routerAdd("GET", "/api/cymbal/owner/status", (e) => {
   require(__hooks + "/lib/util.js").requireOwner(e);
