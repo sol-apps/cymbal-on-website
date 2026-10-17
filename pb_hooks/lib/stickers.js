@@ -258,7 +258,7 @@ function removeKind(app, id) {
   return { ok: true };
 }
 
-// GET /api/cymbal/leaderboard — posts by how many reacts (stickers) they have,
+// GET /api/cymbal/owner/leaderboard — posts by how many reacts (stickers) they have,
 // with listens and comments alongside to break ties.
 function leaderboard(app) {
   const rows = arrayOf(new DynamicModel({ post: "", kind: "", custom: "", n: 0 }));

@@ -1837,12 +1837,14 @@
       status);
   }
 
+  // Most reacts is the owner's alone; anyone else gets an empty, hidden box.
   async function loadLeaderboard() {
     const box = $("leaderboard");
     if (!box) return;
+    if (!ownerNow) { box.hidden = true; box.replaceChildren(); return; }
     box.hidden = false;
     let data;
-    try { data = await api("/api/cymbal/leaderboard"); } catch (err) {
+    try { data = await api("/api/cymbal/owner/leaderboard"); } catch (err) {
       box.replaceChildren(h("h2", { class: "label" }, "MOST REACTS"), h("p", { class: "status is-error" }, err.message));
       return;
     }
@@ -1971,7 +1973,6 @@
   const kindsReady = loadKinds();
   if (PAGE === "misc") {
     loadPlaylists();
-    kindsReady.then(loadLeaderboard);
   }
   if (onFeed) {
     setupComposer();
@@ -2028,6 +2029,7 @@
     if (miscHere && changed) {
       loadProfile();
       loadStickerAdmin();
+      kindsReady.then(loadLeaderboard);
     }
     if (onFeed && whoState !== null && changed) loadFeed(true);
     whoState = who;

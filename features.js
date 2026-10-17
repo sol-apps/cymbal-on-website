@@ -15,8 +15,8 @@ const FEATURES = {
   stickerButton: "all",       // a button on each post, showing the newest stickers, next to + COMMENT
   plusComment: "all",         // a smaller "+ COMMENT" button
   openComments: "all",        // comments shown on every post, folded after three
-  miscPage: "all",            // misc.html: your picture, playlists, theme, most reacts (and the
-                              // owner panel); a MISC button replaces DARK and the playlist row
+  miscPage: "all",            // misc.html: your picture, playlists, theme (and, for the owner, most
+                              // reacts and the owner panel); a MISC button replaces DARK and the playlist row
   listenCount: "all",         // how many browsers played each post
   accountAvatars: "all",      // no empty avatar: a picture, a letter for an account, or nothing
   profilePics: "all",         // anyone can set a picture (on misc.html); their posts show it

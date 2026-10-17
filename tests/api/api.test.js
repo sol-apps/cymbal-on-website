@@ -570,7 +570,12 @@ test("sticker uploads: anyone submits a few PNGs, signed-out ones wait for the o
   assert.equal(stuck.json.sticker.kind, kind.id);
   assert.equal((await as("owner").post("/api/cymbal/posts/" + post.id + "/stickers", { kind: "u_aaaaaaaaaaaaaaa", x: 0.5, y: 30 })).status, 400);
 
-  const board = await call("GET", "/api/cymbal/leaderboard");
+  // Most reacts is the owner's alone.
+  const old = await call("GET", "/api/cymbal/leaderboard");
+  assert.ok(!(old.json && old.json.posts), "the old public path is gone");
+  assert.equal((await call("GET", "/api/cymbal/owner/leaderboard")).status, 401);
+  assert.equal((await call("GET", "/api/cymbal/owner/leaderboard", { token: U.member.token })).status, 403);
+  const board = await as("owner").get("/api/cymbal/owner/leaderboard");
   assert.equal(board.status, 200, board.text);
   const row = board.json.posts.find((p) => p.id === post.id);
   assert.deepEqual([row.reacts, row.kinds[kind.id]], [1, 1]);

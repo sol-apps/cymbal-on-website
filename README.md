@@ -60,8 +60,8 @@ top right, no source label or playlist chips), no empty avatars, profile picture
 the Misc page.
 
 `misc.html` is for everyone: a picture and name for this browser, the playlists, the
-light/dark switch and the posts with the most reacts. Signed in as the owner it also has
-the owner panel and sticker uploads. A picture belongs to the browser that set it, like
+light/dark switch and sticker uploads. Signed in as the owner it also has the posts with
+the most reacts (below the stickers) and the owner panel. A picture belongs to the browser that set it, like
 a post does, and shows on that browser's posts.
 
 Listens are counted for everyone even while only signed-in people see the numbers: clicking
